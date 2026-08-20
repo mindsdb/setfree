@@ -82,6 +82,31 @@ func TestBuild_ModelOverride(t *testing.T) {
 	}
 }
 
+func TestBuild_ModelDiscoveryEnablesGatewayPicker(t *testing.T) {
+	a := adapter{}
+
+	build, err := a.Build(nil, gateway.Resolved{
+		Gateway: gateway.Gateway{BaseURL: "https://gw.example.com", APIKey: "sk-gateway"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if _, ok := lookup(t, build.Env, envModelDiscovery); ok {
+		t.Errorf("%s should be unset when discovery wasn't confirmed", envModelDiscovery)
+	}
+
+	build, err = a.Build(nil, gateway.Resolved{
+		Gateway:        gateway.Gateway{BaseURL: "https://gw.example.com", APIKey: "sk-gateway"},
+		ModelDiscovery: true,
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if v, ok := lookup(t, build.Env, envModelDiscovery); !ok || v != "1" {
+		t.Errorf("%s = %q, %v; want \"1\" so /model lists the gateway's models", envModelDiscovery, v, ok)
+	}
+}
+
 func TestDiscoverModels_NativeAnthropicModels(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer sk-gateway" {

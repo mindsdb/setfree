@@ -56,6 +56,11 @@ func (r *Resolver) getenv(key string) string {
 type Resolved struct {
 	Gateway Gateway
 	Model   string // empty means "let the CLI use its own default"
+	// ModelDiscovery means SetFree has confirmed the gateway serves this
+	// CLI's models via a listing endpoint, so adapters should turn on the
+	// CLI's own gateway-backed model picker where one exists (e.g. Claude
+	// Code's CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY).
+	ModelDiscovery bool
 }
 
 // Resolve computes the gateway + model to use for cliName, applying the
@@ -75,9 +80,11 @@ func (r *Resolver) Resolve(cliName string) (Resolved, error) {
 	}
 
 	model := ""
+	discovery := false
 	if r.Settings != nil {
 		if cliCfg, ok := r.Settings.CLI[cliName]; ok {
 			model = cliCfg.Model
+			discovery = cliCfg.ModelDiscovery
 		}
 	}
 	if envModel := strings.TrimSpace(r.getenv(EnvModel)); envModel != "" {
@@ -92,7 +99,7 @@ func (r *Resolver) Resolve(cliName string) (Resolved, error) {
 	}
 
 	gw.Name = name
-	return Resolved{Gateway: gw, Model: model}, nil
+	return Resolved{Gateway: gw, Model: model, ModelDiscovery: discovery}, nil
 }
 
 // selectGateway picks the named gateway (via SETFREE_GATEWAY, if set and

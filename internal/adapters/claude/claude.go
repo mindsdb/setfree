@@ -32,6 +32,11 @@ const (
 	envAuthToken = "ANTHROPIC_AUTH_TOKEN"
 	envAPIKey    = "ANTHROPIC_API_KEY"
 	envModel     = "ANTHROPIC_MODEL"
+	// envModelDiscovery makes Claude Code's `/model` picker list what the
+	// gateway's models endpoint actually serves, instead of only its own
+	// hardcoded Anthropic lineup. Without it, `/model` shows Opus/Sonnet/
+	// Haiku regardless of what the gateway offers.
+	envModelDiscovery = "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"
 )
 
 // nativeModelPrefixes are how Anthropic names its own models. A gateway
@@ -64,6 +69,9 @@ func (adapter) Build(baseEnv []string, resolved gateway.Resolved) (adapters.Buil
 	env = envutil.Set(env, envAuthToken, resolved.Gateway.APIKey)
 	if resolved.Model != "" {
 		env = envutil.Set(env, envModel, resolved.Model)
+	}
+	if resolved.ModelDiscovery {
+		env = envutil.Set(env, envModelDiscovery, "1")
 	}
 	return adapters.Build{Env: env}, nil
 }
