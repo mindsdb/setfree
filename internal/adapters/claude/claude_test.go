@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/mindsdb/setfree/internal/adapters"
@@ -100,6 +101,33 @@ func TestDiscoverModels_NativeAnthropicModels(t *testing.T) {
 	}
 	if len(d.Models) != 2 {
 		t.Errorf("Models = %v", d.Models)
+	}
+}
+
+func TestDiscoverModels_SendsClaudeCodeClientHeaders(t *testing.T) {
+	// Some gateways only surface a claude-prefixed catalog (so Claude
+	// Code's own /model picker can show non-Anthropic models) when the
+	// caller looks like the real Claude Code client, not a generic HTTP
+	// client. The probe must send the same header shape or it'll see the
+	// unrewritten catalog and wrongly conclude the models aren't native.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.Header.Get("User-Agent"), "claude-cli/") {
+			t.Errorf("User-Agent = %q, want claude-cli/ prefix", r.Header.Get("User-Agent"))
+		}
+		if r.Header.Get("x-app") != "cli" {
+			t.Errorf("x-app = %q, want \"cli\"", r.Header.Get("x-app"))
+		}
+		if !strings.Contains(r.Header.Get("anthropic-beta"), "claude-code-") {
+			t.Errorf("anthropic-beta = %q, want it to contain \"claude-code-\"", r.Header.Get("anthropic-beta"))
+		}
+		w.Write([]byte(`{"data":[{"id":"claude-3-5-sonnet"}]}`))
+	}))
+	defer srv.Close()
+
+	a := adapter{}
+	d := a.DiscoverModels(context.Background(), gatewayAt(srv.URL, "sk-gateway"))
+	if !d.Supported {
+		t.Fatalf("Discovery = %+v, want Supported", d)
 	}
 }
 

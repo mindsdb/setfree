@@ -39,6 +39,15 @@ const (
 // Code's own `/model` picker can be trusted to work correctly.
 var nativeModelPrefixes = []string{"claude", "anthropic"}
 
+// claudeCodeUserAgent and claudeCodeBetaMarker mimic the header shape the
+// real Claude Code binary sends, so a models-list probe is treated by
+// gateways the same way a genuine Claude Code launch would be. The exact
+// version token doesn't matter to that check, only the prefix/substring.
+const (
+	claudeCodeUserAgent  = "claude-cli/1.0.0 (external, cli)"
+	claudeCodeBetaMarker = "claude-code-20250219"
+)
+
 type adapter struct{}
 
 func init() {
@@ -64,5 +73,15 @@ func (adapter) DiscoverModels(ctx context.Context, gw gateway.Gateway) adapters.
 		"Authorization":     "Bearer " + gw.APIKey,
 		"x-api-key":         gw.APIKey, // hedge: real Anthropic-style gateways expect this instead
 		"anthropic-version": "2023-06-01",
+		// Some gateways (e.g. mindsdb's inference gateway) only rewrite a
+		// mixed-provider catalog into claude-prefixed ids — so Claude
+		// Code's own /model picker can show them — when the caller looks
+		// like the real Claude Code client. Without these, the probe
+		// would see the unrewritten catalog, wrongly conclude the models
+		// aren't native, and prompt the user even though the real binary
+		// would have worked silently via its own picker.
+		"User-Agent":     claudeCodeUserAgent,
+		"x-app":          "cli",
+		"anthropic-beta": claudeCodeBetaMarker,
 	}, nativeModelPrefixes)
 }
