@@ -40,6 +40,15 @@ const releaseTag = "latest"
 
 const checkInterval = 24 * time.Hour
 
+// ThrottleChecks gates the once-a-day limit on update checks. It's off
+// while SetFree is still moving fast: a fix pushed to main should reach
+// people on their next launch, not up to a day later. Flip it back to true
+// once releases settle down, so normal use stops making a network request
+// on every single command.
+//
+// SETFREE_NO_AUTOUPDATE still disables checking entirely, regardless.
+const ThrottleChecks = false
+
 const repo = "mindsdb/setfree"
 
 const defaultBaseURL = "https://github.com/" + repo + "/releases/download/" + releaseTag
@@ -87,11 +96,15 @@ func (c *Checker) statePath() string {
 	return filepath.Join(c.Dir, "last-update-check")
 }
 
-// Due reports whether it's time to check again: disabled by env var, never
-// checked before, or the last check was over checkInterval ago.
+// Due reports whether it's time to check again: never when disabled by env
+// var, always when ThrottleChecks is off, and otherwise when there's no
+// record of a previous check or the last one was over checkInterval ago.
 func (c *Checker) Due(now time.Time) bool {
 	if c.getenv(EnvDisable) != "" {
 		return false
+	}
+	if !ThrottleChecks {
+		return true
 	}
 	data, err := os.ReadFile(c.statePath())
 	if err != nil {

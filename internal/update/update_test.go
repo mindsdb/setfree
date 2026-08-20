@@ -28,7 +28,10 @@ func TestDue_TrueWhenNeverChecked(t *testing.T) {
 	}
 }
 
-func TestDue_FalseRightAfterChecking(t *testing.T) {
+func TestDue_ThrottleWindow(t *testing.T) {
+	if !ThrottleChecks {
+		t.Skip("throttling is off, so Due() ignores the last-check timestamp")
+	}
 	c := &Checker{Dir: t.TempDir(), Getenv: fakeEnv(nil)}
 	now := time.Now()
 	if err := c.MarkChecked(now); err != nil {
@@ -39,6 +42,31 @@ func TestDue_FalseRightAfterChecking(t *testing.T) {
 	}
 	if !c.Due(now.Add(25 * time.Hour)) {
 		t.Error("expected Due() to be true after the check interval has passed")
+	}
+}
+
+// With throttling off, a check that just ran must not suppress the next
+// one — that's the whole point of the flag while releases are moving fast.
+func TestDue_IgnoresLastCheckWhenThrottlingIsOff(t *testing.T) {
+	if ThrottleChecks {
+		t.Skip("throttling is on, covered by TestDue_ThrottleWindow")
+	}
+	c := &Checker{Dir: t.TempDir(), Getenv: fakeEnv(nil)}
+	now := time.Now()
+	if err := c.MarkChecked(now); err != nil {
+		t.Fatalf("MarkChecked: %v", err)
+	}
+	if !c.Due(now.Add(time.Second)) {
+		t.Error("expected Due() to be true immediately after a check when throttling is off")
+	}
+}
+
+// The env kill switch has to win over the flag, or there'd be no way to
+// turn checking off at all while throttling is disabled.
+func TestDue_EnvDisableBeatsThrottleFlag(t *testing.T) {
+	c := &Checker{Dir: t.TempDir(), Getenv: fakeEnv(map[string]string{EnvDisable: "1"})}
+	if c.Due(time.Now()) {
+		t.Error("SETFREE_NO_AUTOUPDATE must disable checking regardless of ThrottleChecks")
 	}
 }
 
