@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+            asset: Darwin_arm64
+          - goos: darwin
+            goarch: amd64
+            asset: Darwin_x86_64
+          - goos: linux
+            goarch: arm64
+            asset: Linux_arm64
+          - goos: linux
+            goarch: amd64
+            asset: Linux_x86_64
+          - goos: windows
+            goarch: amd64
+            asset: Windows_x86_64
+          - goos: windows
+            goarch: arm64
+            asset: Windows_arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -eu
+          mkdir -p dist
+          binary=setfree
+          if [ "${{ matrix.goos }}" = "windows" ]; then binary=setfree.exe; fi
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/mindsdb/setfree/internal/version.Version=${{ github.ref_name }}" \
+            -o "dist/$binary" ./cmd/setfree
+
+      - name: Package
+        run: |
+          set -eu
+          cd dist
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "setfree_${{ matrix.asset }}.zip" setfree.exe
+            rm setfree.exe
+          else
+            tar -czf "setfree_${{ matrix.asset }}.tar.gz" setfree
+            rm setfree
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setfree_${{ matrix.asset }}
+          path: dist/*
+          retention-days: 1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          set -eu
+          cd dist
+          sha256sum * > checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

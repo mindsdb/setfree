@@ -22,7 +22,7 @@ Claude Code, Codex, Gemini CLI, Aider — they're genuinely good interfaces. Goo
 
 **The interface and the model should be two separate decisions.**
 
-You pick the CLI because you like how it works. You pick the model and infra because of cost, latency, compliance, or just what's good this month. Neither choice should hostage the other.
+You pick the CLI because you like how it works. You pick the model and infra because of cost, latency, compliance, or just what's good this month. Neither choice should hold the other hostage.
 
 SetFree is the thin, boring layer that makes that true — nothing more.
 
@@ -38,63 +38,99 @@ Other CLIs ──┘
 
 When you run `setfree claude`, here's the whole trick:
 
-1. SetFree locates your installed `claude` binary.
-2. It resolves your configured gateway and model into the specific environment variables, base URLs, and auth that CLI expects.
-3. It `exec`s the real binary with that environment — passing through your working directory, stdin/stdout/stderr, exit code, and signals untouched.
+1. SetFree finds your installed `claude` binary on `PATH`.
+2. It resolves your configured gateway (and model, if you've pinned one) into whatever that specific CLI expects — environment variables for Claude Code, `-c` config overrides for Codex.
+3. It replaces itself with the real binary (`exec`, not a subprocess) — same stdin/stdout/stderr, same working directory, same exit code, same signal handling a direct invocation would have.
 
-No shims, no forked CLI, no man-in-the-middle process babysitting your session. Once it launches, SetFree is out of the picture — you're just running Claude Code.
+No shim, no proxy, no man-in-the-middle process babysitting your session. Once it launches, SetFree is out of the picture entirely — you're just running Claude Code.
 
 ## Install
 
 ```sh
-curl -fsSL https://setfree.dev/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mindsdb/setfree/main/install.sh | sh
 ```
 
 Windows (PowerShell):
 
 ```powershell
-irm https://setfree.dev/install.ps1 | iex
+irm https://raw.githubusercontent.com/mindsdb/setfree/main/install.ps1 | iex
 ```
 
-Single static binary. No Python, no Node, no Go toolchain required to run it. Homebrew, Scoop, and WinGet formulas are on the roadmap — not yet published, so don't go looking for `brew install setfree` today.
+Single native binary, built in Go. No Python, no Node, no Go toolchain required to run it. Homebrew, Scoop, and WinGet formulas are on the roadmap — not yet published, so don't go looking for `brew install setfree` today.
 
 ## Usage
 
 ```sh
-setfree claude              # launch Claude Code through your default gateway
-setfree codex .              # launch Codex in the current directory
-setfree gemini --model gpt-5 # override the model for this run
+setfree claude       # launch Claude Code through your configured gateway
+setfree claude .     # arguments pass straight through
+setfree codex .
 ```
 
-Anything after the CLI name passes straight through to the underlying tool:
+Anything after the CLI name is forwarded to the underlying tool untouched:
 
 ```sh
 setfree claude --dangerously-skip-permissions
 setfree codex . --full-auto
 ```
 
-Explicit gateway and model overrides are on the near-term roadmap:
+The first time you run either, SetFree notices there's no gateway configured yet and asks, once:
 
-```sh
-setfree claude --gateway openrouter
-setfree claude --gateway https://llm.example.com
-setfree codex --model claude-sonnet
+```
+ ,-.
+(o.o)
+|>-<|
+/   \
+
+Welcome to SetFree.
+
+No LLM gateway is configured yet. Let's connect one.
+
+Base URL
+> https://llm.example.com
+
+API key
+>
+
+✓ Settings saved
+
+Saved as your default gateway.
+
+Launching Claude Code...
 ```
 
-*(Illustrative — see [Status](#status) for what actually ships today.)*
+Every run after that is silent — straight to `claude`, no prompts, no banner. That's deliberate: a wrapper you notice on every launch is a wrapper that's in your way.
+
+Setup only runs when stdin is a real terminal. In scripts or CI, set `SETFREE_BASE_URL` / `SETFREE_API_KEY` instead (see [Configuration](#configuration)) — SetFree fails fast with a clear message rather than hanging on a prompt no one will answer.
+
+## Supported CLIs
+
+| CLI | Status |
+|---|---|
+| Claude Code (`claude`) | ✅ Implemented |
+| Codex (`codex`) | ✅ Implemented |
+| Gemini CLI (`gemini`) | 📋 Detected, not launchable yet |
+| Aider (`aider`) | 📋 Detected, not launchable yet |
+
+Gemini CLI and Aider show up in `setfree`'s landing screen if they're installed, but there's no adapter for them yet — running `setfree gemini` tells you that plainly instead of pretending to work.
+
+## Gateways
+
+SetFree doesn't ship gateway-specific integrations today — it needs one thing: a base URL and a key for an endpoint that speaks the protocol your coding CLI already expects (Anthropic-style for Claude Code, OpenAI Responses API for Codex). In practice that covers most OpenRouter, LiteLLM, and self-hosted setups, since they speak one of those dialects already. A local proxy on `http://localhost:...` works the same way.
+
+If a specific gateway needs quirkier handling (custom headers, a different auth scheme), that's the extension point a future gateway-specific adapter would fill — see [Roadmap](#roadmap).
 
 ## Configuration
 
-SetFree reads a single config file, checked in nowhere, full of secrets nowhere:
+SetFree keeps two small files in your per-user config directory (`os.UserConfigDir()` — e.g. `~/Library/Application Support/setfree` on macOS, `~/.config/setfree` on Linux, `%AppData%\setfree` on Windows):
 
-`~/.setfree/config.toml`
+**`config.toml`** — everything non-secret:
 
 ```toml
-default_gateway = "my-gateway"
+version = 1
+default_gateway = "default"
 
-[gateways.my-gateway]
+[gateways.default]
 base_url = "https://llm.example.com"
-api_key_env = "MY_LLM_API_KEY"
 
 [cli.claude]
 model = "kimi-k2.5"
@@ -103,99 +139,99 @@ model = "kimi-k2.5"
 model = "gpt-5"
 ```
 
-Credentials are referenced by environment variable name (`api_key_env`), never written to disk in plaintext. Pull them from your shell profile, a secrets manager, or whatever credential store you already trust — SetFree just reads the pointer.
+**`credentials.toml`** — API keys, kept in a separate file with `0600` permissions so a `cat config.toml` to debug your setup never dumps a secret to your terminal.
 
-This schema is early and will change. Treat it as a sketch of the shape, not a stable contract yet.
+Manage it without hand-editing either file:
 
-## Status
+```sh
+setfree config          # interactive: view and edit base URL / API key
+setfree config show      # print current status (keys shown as "configured", never in full)
+setfree config set --base-url https://gw.example.com --api-key sk-...
+setfree config reset     # clear SetFree's own config — never touches Claude/Codex's
+```
 
-SetFree is young. Here's what's real versus what's coming.
+For scripts and CI, environment variables override saved config for a single run:
 
-**Coding CLIs**
-
-| CLI | Status |
+| Variable | Overrides |
 |---|---|
-| Claude Code | 🚧 In progress |
-| Codex | 🚧 In progress |
-| Gemini CLI | 📋 Planned |
-| Aider | 📋 Planned |
+| `SETFREE_BASE_URL` | gateway base URL |
+| `SETFREE_API_KEY` | gateway API key |
+| `SETFREE_MODEL` | model for this run |
+| `SETFREE_GATEWAY` | which saved gateway to use, by name |
 
-**Gateways**
-
-| Gateway | Status |
-|---|---|
-| Custom / OpenAI-compatible URL | 🚧 In progress |
-| OpenRouter | 📋 Planned |
-| LiteLLM | 📋 Planned |
-| MindsHub | 📋 Planned |
-| Enterprise / self-hosted gateways | 📋 Planned |
-
-🚧 = actively being built, expect rough edges. 📋 = designed, not implemented. Nothing here is vaporware marketing — if it's not in one of these tables as shipping, it doesn't work yet.
+Precedence: SetFree env vars → saved config → interactive setup (which only triggers on a real terminal).
 
 ## Architecture
 
-SetFree is built around two small, swappable abstractions:
+SetFree is built around one small abstraction: a **CLI adapter**.
 
-**CLI adapters** know how one specific coding tool wants to be configured — which environment variables it reads, what shape it expects its base URL in, how it expects auth to be presented. A `claude` adapter and a `codex` adapter don't need to agree on anything internally; they just need to speak SetFree's normalized config on one side and the CLI's native expectations on the other.
+```go
+type Adapter interface {
+	Name() string          // "claude" — what you type on the command line
+	DisplayName() string   // "Claude Code"
+	BinaryNames() []string // executables to look for on PATH
+	Build(baseEnv []string, resolved gateway.Resolved) (Build, error)
+}
+```
 
-**Gateway adapters** know how to talk to one specific LLM endpoint style — building the right base URL, headers, and credential wiring for OpenRouter, a LiteLLM instance, or a bare OpenAI-compatible URL.
-
-SetFree's job is entirely in the middle:
+`Build` turns a normalized `Gateway{BaseURL, APIKey}` plus an optional model into whatever that specific CLI needs — environment variables, extra argv, or both. Everything vendor-specific lives inside one adapter; nothing else in SetFree needs to know how Claude Code or Codex actually read their config.
 
 ```
-CLI adapter  →  normalized config  →  gateway adapter  →  environment for exec()
+internal/
+  adapters/       adapter interface + registry, plus claude/ and codex/
+  config/         SetFree's own non-secret settings (config.toml)
+  secrets/        API key storage, isolated from config on purpose
+  gateway/        the normalized Gateway type + resolution precedence
+  detect/         which known coding CLIs are installed
+  launcher/       process replacement (exec on Unix, spawn+wait on Windows)
+  terminal/       TTY/color detection, hidden password input
+  ui/             the robot, landing screen, setup and config prompts
+  app/            command dispatch — the only place that ties it together
 ```
 
-That's the whole system. No daemon, no background process, no persistent state beyond your config file.
+No daemon, no background process, no persistent state beyond the two config files above.
 
 ## Adding a CLI adapter
 
-A CLI adapter is a small Go package that answers one question: *given a normalized model + gateway config, what environment does this CLI need to see?*
+Look at `internal/adapters/claude/claude.go` or `internal/adapters/codex/codex.go` — each is under 60 lines. To add one:
 
-Roughly:
+1. Create `internal/adapters/<name>/`.
+2. Implement `Adapter`, register it in an `init()` via `adapters.Register(...)`.
+3. Blank-import the package from `internal/app/app.go`.
+4. Add it to `internal/detect.List` with `Supported: true`.
+5. Write a test asserting the environment/args `Build` produces for a known gateway — see the existing adapter tests for the pattern.
 
-1. Implement the adapter interface — binary discovery, env var mapping, arg passthrough rules.
-2. Register it under `cli/<name>`.
-3. Add a fixture/test asserting the expected environment for a known config.
-
-If your favorite CLI isn't listed above, this is the fastest path to getting it supported — PRs adding adapters are exactly what this project wants.
-
-## Adding a gateway adapter
-
-Same idea, other side of the wire: given SetFree's normalized gateway config (`base_url`, `api_key_env`, provider-specific quirks), produce the concrete env vars and headers a CLI adapter can consume.
-
-Contribution shape is the same as above — implement the interface, register under `gateway/<name>`, add a test fixture. Gateways with genuinely different auth or endpoint conventions are the most useful contributions right now.
+If your favorite CLI isn't listed above, this is the fastest path to getting it supported.
 
 ## Security philosophy
 
-SetFree doesn't ask you to trust it with less than you already trust your shell.
+- API keys live in `credentials.toml`, separate from `config.toml`, created with `0600` permissions on Unix. `setfree config show` never prints one — only whether it's configured.
+- Codex's API key is never placed on argv (visible to any user via `ps`); it's passed through the child's environment and referenced by name instead.
+- SetFree builds a child process environment and gets out of the way — it doesn't proxy your traffic, phone home, or sit in the request path once the real CLI is running.
+- No modified or repackaged coding CLI binaries, ever. SetFree launches the CLI you already installed, unmodified, and never rewrites its native config.
 
-- Secrets are referenced by environment variable name, never stored or logged by SetFree in plaintext.
-- SetFree does not phone home, does not proxy your traffic, and does not sit in the request path once your CLI has launched. It builds an environment and gets out of the way.
-- No modified or repackaged coding CLI binaries — ever. SetFree launches the CLI you already installed, unmodified.
-
-This is a configuration and interoperability tool. It doesn't circumvent authentication, bypass licensing, or spoof a provider — it just lets you point a great interface at the backend you're already authorized to use.
+This is a configuration and interoperability tool. It doesn't circumvent authentication, bypass licensing, or spoof a provider — it just lets you point a great interface at a backend you're already authorized to use.
 
 ## Roadmap
 
-- [ ] Stable `--gateway` / `--model` CLI flags
 - [ ] Gemini CLI and Aider adapters
-- [ ] OpenRouter, LiteLLM, and MindsHub gateway adapters
+- [ ] `setfree gateway add|list|use` for multiple named gateways (the config format already supports it)
+- [ ] `--gateway` / `--model` flags for one-off overrides
+- [ ] Gateway-specific adapters for providers that need non-generic handling
 - [ ] Homebrew / Scoop / WinGet distribution
-- [ ] Config validation and `setfree doctor`
-- [ ] Per-project config overrides
+- [ ] OS keychain-backed credential storage as an alternative to `credentials.toml`
 
 Roadmap order isn't a promise — it's a reflection of what's likely to get picked up first. Open an issue if your use case should jump the queue.
 
 ## Contributing
 
-SetFree is intentionally small in scope: adapters in, exec out. That makes it a good project to contribute to even in short bursts.
+SetFree is intentionally small: adapters in, exec out. That makes it a good project to contribute to even in short bursts.
 
 Good first contributions:
 
-- A new CLI or gateway adapter (see above)
-- Filling gaps in the config schema
+- A new CLI adapter (see above)
 - Platform-specific packaging (Scoop, WinGet, Homebrew formula)
+- Filling gaps in the config schema as multi-gateway support lands
 
 Open an issue before large changes so we can agree on shape first. Everything else — fork, branch, PR.
 

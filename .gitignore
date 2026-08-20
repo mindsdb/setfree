@@ -1,0 +1,8 @@
+/dist/
+/setfree
+/setfree.exe
+*.tar.gz
+*.zip
+*.test
+*.out
+.DS_Store
