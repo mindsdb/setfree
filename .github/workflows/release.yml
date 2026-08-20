@@ -1,12 +1,20 @@
 name: Release
 
+# Runs on every push to main (publishing/updating the rolling "latest"
+# release that internal/update tracks for self-updating) and on version
+# tags (publishing a proper, permanent release under that tag).
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -49,8 +57,10 @@ jobs:
           mkdir -p dist
           binary=setfree
           if [ "${{ matrix.goos }}" = "windows" ]; then binary=setfree.exe; fi
+          version="${{ github.ref_name }}"
+          if [ "${{ github.ref_type }}" != "tag" ]; then version="main"; fi
           go build -trimpath \
-            -ldflags "-s -w -X github.com/mindsdb/setfree/internal/version.Version=${{ github.ref_name }}" \
+            -ldflags "-s -w -X github.com/mindsdb/setfree/internal/version.Version=$version -X github.com/mindsdb/setfree/internal/version.Commit=${{ github.sha }}" \
             -o "dist/$binary" ./cmd/setfree
 
       - name: Package
@@ -80,13 +90,21 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Generate checksums
+      - name: Generate checksums and commit marker
         run: |
           set -eu
           cd dist
           sha256sum * > checksums.txt
+          echo "${{ github.sha }}" > commit.txt
 
+      # Tag pushes (v1.2.3) publish a permanent release under that tag.
+      # Everything else (every push to main) republishes the single
+      # rolling "latest" release that internal/update polls for
+      # self-updating — same tag name, contents replaced each time.
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || 'Latest (main)' }}
+          body: ${{ github.ref_type == 'tag' && '' || format('Continuous build from main at {0}.', github.sha) }}
+          generate_release_notes: ${{ github.ref_type == 'tag' }}
           files: dist/*
-          generate_release_notes: true

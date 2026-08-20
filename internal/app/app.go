@@ -50,6 +50,7 @@ func (e *env) resolver() *gateway.Resolver {
 // code; main() is responsible for os.Exit.
 func Run(args []string) int {
 	if len(args) == 0 {
+		maybeSelfUpdate()
 		return cmdLanding()
 	}
 
@@ -58,11 +59,13 @@ func Run(args []string) int {
 		fmt.Print(ui.HelpText)
 		return 0
 	case "version", "--version", "-v":
-		fmt.Printf("setfree %s\n", version.Version)
+		fmt.Printf("setfree %s\n", version.Display())
 		return 0
 	case "config":
+		maybeSelfUpdate()
 		return cmdConfig(args[1:])
 	default:
+		maybeSelfUpdate()
 		return cmdLaunch(args[0], args[1:])
 	}
 }

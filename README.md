@@ -47,6 +47,8 @@ irm https://raw.githubusercontent.com/mindsdb/setfree/main/install.ps1 | iex
 
 One binary. No Python, no Node, no Go required to run it. Homebrew and friends are on the way, not here yet.
 
+SetFree also keeps itself current on its own. Once a day it checks whether main has moved on without it and quietly installs the newer build. No `setfree update` to remember, no changelog to read. Set `SETFREE_NO_AUTOUPDATE=1` if you'd rather pin a version yourself.
+
 ## Usage
 
 ```sh
@@ -191,6 +193,7 @@ Missing your favorite CLI? This is the fast path to fixing that yourself.
 - Codex's key never touches argv, where anyone on the machine could read it with `ps`. It travels through the child process's environment instead.
 - SetFree builds an environment and steps aside. It doesn't proxy your traffic, phone home, or sit in the request path once the CLI is running.
 - No modified binaries, ever. SetFree launches the CLI you installed, exactly as it is, and never rewrites its native config.
+- Self-updates are checked against `checksums.txt` before anything gets installed. A mismatch aborts the update and leaves your current binary untouched.
 
 This is a configuration tool, not a bypass. It doesn't touch authentication or licensing, and it doesn't spoof a provider. It just points a good interface at a backend you're already allowed to use.
 

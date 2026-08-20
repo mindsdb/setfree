@@ -23,9 +23,14 @@ Supported CLIs:
   codex    Codex
 
 Environment variables (override saved config for one run):
-  SETFREE_BASE_URL   gateway base URL
-  SETFREE_API_KEY    gateway API key
-  SETFREE_MODEL      model override
+  SETFREE_BASE_URL      gateway base URL
+  SETFREE_API_KEY       gateway API key
+  SETFREE_MODEL         model override
+  SETFREE_NO_AUTOUPDATE turn off self-updating
+
+SetFree checks once a day whether it's behind the latest commit on main
+and updates itself if so. Release builds only; set SETFREE_NO_AUTOUPDATE
+to turn it off.
 
 Run 'setfree' with no arguments for status and detected CLIs.
 `
