@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -50,9 +49,9 @@ func TestPromptProvider_FallsBackToNumberedPrompt(t *testing.T) {
 	var buf bytes.Buffer
 	r := &scriptedReader{lines: []string{"2"}}
 
-	// os.Stdin here is not a TTY under `go test`, which is the case
-	// being exercised.
-	p, err := PromptProvider(&buf, os.Stdin, terminal.Colors{}, r)
+	// scriptedReader doesn't implement terminal.Selector, so this always
+	// exercises the fallback path regardless of whether stdin is a TTY.
+	p, err := PromptProvider(&buf, r, terminal.Colors{})
 	if err != nil {
 		t.Fatalf("PromptProvider: %v", err)
 	}
@@ -68,7 +67,7 @@ func TestPromptProvider_AcceptsNameNotJustNumber(t *testing.T) {
 	var buf bytes.Buffer
 	r := &scriptedReader{lines: []string{"litellm"}}
 
-	p, err := PromptProvider(&buf, os.Stdin, terminal.Colors{}, r)
+	p, err := PromptProvider(&buf, r, terminal.Colors{})
 	if err != nil {
 		t.Fatalf("PromptProvider: %v", err)
 	}
@@ -81,7 +80,7 @@ func TestPromptProvider_RetriesOnGarbage(t *testing.T) {
 	var buf bytes.Buffer
 	r := &scriptedReader{lines: []string{"banana", "99", "4"}}
 
-	p, err := PromptProvider(&buf, os.Stdin, terminal.Colors{}, r)
+	p, err := PromptProvider(&buf, r, terminal.Colors{})
 	if err != nil {
 		t.Fatalf("PromptProvider: %v", err)
 	}

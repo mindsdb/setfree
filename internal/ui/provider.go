@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -14,28 +13,32 @@ import (
 )
 
 // PromptProvider asks which gateway to connect, as an arrow-key list when
-// stdin is a terminal and a numbered prompt otherwise (a pipe, a CI job).
-// Both paths accept the same digits, so scripted input works either way.
-func PromptProvider(w io.Writer, in *os.File, c terminal.Colors, lines LineReader) (config.Provider, error) {
+// lines is backed by a real terminal (it satisfies terminal.Selector) and a
+// numbered prompt otherwise (a pipe, a CI job, a test double). Both paths
+// accept the same digits, so scripted input works either way.
+func PromptProvider(w io.Writer, lines LineReader, c terminal.Colors) (config.Provider, error) {
 	providers := config.Providers()
 
 	fmt.Fprintln(w, "Which gateway do you want to use?")
 	fmt.Fprintln(w)
 
-	choices := make([]terminal.Choice, len(providers))
-	for i, p := range providers {
-		choices[i] = terminal.Choice{Label: p.DisplayName, Detail: p.Detail}
-	}
+	if selector, ok := lines.(terminal.Selector); ok {
+		choices := make([]terminal.Choice, len(providers))
+		for i, p := range providers {
+			choices[i] = terminal.Choice{Label: p.DisplayName, Detail: p.Detail}
+		}
 
-	idx, err := terminal.Select(w, in, c, choices, 0)
-	switch {
-	case err == nil:
-		fmt.Fprintln(w)
-		return providers[idx], nil
-	case err == terminal.ErrSelectCancelled:
-		return config.Provider{}, ErrSetupCancelled
-	case err != terminal.ErrNotInteractive:
-		return config.Provider{}, err
+		idx, err := selector.Select(w, c, choices, 0)
+		switch {
+		case err == nil:
+			fmt.Fprintln(w)
+			return providers[idx], nil
+		case err == terminal.ErrSelectCancelled:
+			return config.Provider{}, ErrSetupCancelled
+		case err != terminal.ErrNotInteractive:
+			return config.Provider{}, err
+		}
+		// ErrNotInteractive: fall through to the numbered prompt below.
 	}
 
 	// No terminal to drive: fall back to a plain numbered prompt.

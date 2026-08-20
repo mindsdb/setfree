@@ -184,7 +184,7 @@ func cmdConfigMenu() int {
 			// provider with browser sign-in re-authenticates rather than
 			// silently keeping a key issued for a different endpoint.
 			name := currentGatewayName(e)
-			provider, err := ui.PromptProvider(os.Stdout, os.Stdin, e.colors, reader)
+			provider, err := ui.PromptProvider(os.Stdout, reader, e.colors)
 			if err != nil {
 				return 0
 			}
