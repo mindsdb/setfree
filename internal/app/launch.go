@@ -35,7 +35,7 @@ func cmdLaunch(name string, passthrough []string) int {
 	}
 
 	resolved, err := e.resolver().Resolve(adapter.Name())
-	justConfigured := false
+	interacted := false
 	if err != nil {
 		if !gateway.ErrNotConfigured(err) {
 			return fail(err)
@@ -44,7 +44,23 @@ func cmdLaunch(name string, passthrough []string) int {
 		if err != nil {
 			return fail(err)
 		}
-		justConfigured = true
+		interacted = true
+	}
+
+	// A model choice hasn't been made for this CLI against this gateway
+	// yet, and nothing (env var or existing config) already pins one:
+	// probe for one now, once, and remember the outcome either way.
+	if setting := e.settings.CLI[adapter.Name()]; resolved.Model == "" && !setting.ModelResolved && terminal.IsTTY(os.Stdin) {
+		modelInteracted, modelErr := resolveModel(e, adapter, resolved.Gateway)
+		if modelErr != nil {
+			debugf("model discovery: %v", modelErr)
+		} else if modelInteracted {
+			interacted = true
+			resolved, err = e.resolver().Resolve(adapter.Name())
+			if err != nil {
+				return fail(err)
+			}
+		}
 	}
 
 	build, err := adapter.Build(os.Environ(), resolved)
@@ -52,10 +68,10 @@ func cmdLaunch(name string, passthrough []string) int {
 		return fail(err)
 	}
 
-	if justConfigured {
-		// Only the first run breaks the "feels like running the real CLI"
-		// illusion (it has to, to collect a gateway) — say so once. Every
-		// subsequent launch stays silent and goes straight to exec.
+	if interacted {
+		// Only a run that just asked the user something breaks the
+		// "feels like running the real CLI" illusion — say so once.
+		// Every fully silent run goes straight to exec.
 		fmt.Printf("Launching %s...\n\n", adapter.DisplayName())
 	}
 

@@ -27,9 +27,19 @@ type GatewaySetting struct {
 	BaseURL string `toml:"base_url"`
 }
 
-// CLISetting holds per-coding-CLI preferences, such as a pinned model.
+// CLISetting holds per-coding-CLI preferences: a pinned model, or the
+// outcome of probing the gateway's model-listing endpoint for that CLI.
 type CLISetting struct {
 	Model string `toml:"model,omitempty"`
+	// ModelDiscovery is true once SetFree has confirmed the gateway serves
+	// this CLI's own models natively, so its built-in model picker (e.g.
+	// Claude Code's `/model`) can be trusted with no override needed.
+	ModelDiscovery bool `toml:"model_discovery,omitempty"`
+	// ModelResolved is true once setup has asked about (or probed for)
+	// a model for this CLI against the current gateway at least once —
+	// regardless of the outcome — so SetFree doesn't ask again on every
+	// launch. It's cleared whenever the gateway's base URL changes.
+	ModelResolved bool `toml:"model_resolved,omitempty"`
 }
 
 // DefaultGatewayName is the gateway name SetFree uses until multi-gateway
@@ -55,15 +65,26 @@ func (s *Settings) Default() (GatewaySetting, string, bool) {
 }
 
 // SetGatewayBaseURL records base_url for the named gateway, creating it if
-// needed, and marks it as the default gateway if none is set yet.
+// needed, and marks it as the default gateway if none is set yet. Changing
+// an existing gateway's base URL also clears every CLI's remembered model
+// choice: a different endpoint may serve entirely different models, so an
+// old pin or "this looked native" verdict can't be trusted anymore.
 func (s *Settings) SetGatewayBaseURL(name, baseURL string) {
 	if s.Gateways == nil {
 		s.Gateways = map[string]GatewaySetting{}
+	}
+	if old, ok := s.Gateways[name]; !ok || old.BaseURL != baseURL {
+		s.ResetModelChoices()
 	}
 	s.Gateways[name] = GatewaySetting{BaseURL: baseURL}
 	if s.DefaultGateway == "" {
 		s.DefaultGateway = name
 	}
+}
+
+// ResetModelChoices clears every CLI's pinned model and discovery state.
+func (s *Settings) ResetModelChoices() {
+	s.CLI = nil
 }
 
 // Load reads settings from dir. A missing file is not an error: it returns

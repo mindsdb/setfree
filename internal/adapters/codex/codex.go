@@ -16,6 +16,7 @@
 package codex
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/mindsdb/setfree/internal/adapters"
@@ -28,6 +29,11 @@ const (
 	providerName = "SetFree Gateway"
 	envAPIKeyVar = "SETFREE_CODEX_API_KEY"
 )
+
+// nativeModelPrefixes are how OpenAI names its own models. A gateway whose
+// models list is entirely prefixed like this is one where Codex's own
+// model picker can be trusted to work correctly.
+var nativeModelPrefixes = []string{"gpt", "o1", "o3", "o4", "chatgpt", "davinci", "curie", "babbage", "ada", "text-embedding"}
 
 type adapter struct{}
 
@@ -57,4 +63,10 @@ func (adapter) Build(baseEnv []string, resolved gateway.Resolved) (adapters.Buil
 	}
 
 	return adapters.Build{Env: env, Args: args}, nil
+}
+
+func (adapter) DiscoverModels(ctx context.Context, gw gateway.Gateway) adapters.Discovery {
+	return adapters.ProbeModels(ctx, gw.BaseURL, map[string]string{
+		"Authorization": "Bearer " + gw.APIKey,
+	}, nativeModelPrefixes)
 }

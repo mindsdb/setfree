@@ -5,7 +5,11 @@
 // nothing outside this package should need to know about them.
 package adapters
 
-import "github.com/mindsdb/setfree/internal/gateway"
+import (
+	"context"
+
+	"github.com/mindsdb/setfree/internal/gateway"
+)
 
 // Installation describes a coding CLI found on the user's PATH.
 type Installation struct {
@@ -31,6 +35,25 @@ type Adapter interface {
 	// variables and extra arguments needed to route baseEnv (typically
 	// os.Environ()) through it. It must not mutate baseEnv.
 	Build(baseEnv []string, resolved gateway.Resolved) (Build, error)
+	// DiscoverModels probes gw for a model-listing endpoint using this
+	// CLI's usual protocol and auth headers. It's always best-effort: an
+	// unreachable or non-conforming endpoint just reports Discovery{} —
+	// that's an expected outcome, not a failure worth an error return.
+	DiscoverModels(ctx context.Context, gw gateway.Gateway) Discovery
+}
+
+// Discovery is what an adapter's model-listing probe found.
+type Discovery struct {
+	// Supported reports whether the endpoint answered with a usable list
+	// of models at all.
+	Supported bool
+	// Native reports whether every model returned looks like it belongs
+	// to this adapter's usual provider (e.g. "claude-"/"anthropic-" for
+	// Claude Code) — meaning the CLI's own model picker can be trusted to
+	// work correctly against this gateway, with no override needed.
+	Native bool
+	// Models holds whatever model ids were found, native or not.
+	Models []string
 }
 
 // registry holds every implemented adapter, keyed by Name().

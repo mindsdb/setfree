@@ -1,6 +1,9 @@
 package claude
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/mindsdb/setfree/internal/adapters"
@@ -76,6 +79,64 @@ func TestBuild_ModelOverride(t *testing.T) {
 	if v, ok := lookup(t, build.Env, envModel); !ok || v != "kimi-k2.5" {
 		t.Errorf("%s = %q, %v", envModel, v, ok)
 	}
+}
+
+func TestDiscoverModels_NativeAnthropicModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer sk-gateway" {
+			t.Errorf("missing/wrong Authorization header: %q", r.Header.Get("Authorization"))
+		}
+		if r.Header.Get("anthropic-version") == "" {
+			t.Error("missing anthropic-version header")
+		}
+		w.Write([]byte(`{"data":[{"id":"claude-3-5-sonnet-20241022"},{"id":"claude-3-opus-20240229"}]}`))
+	}))
+	defer srv.Close()
+
+	a := adapter{}
+	d := a.DiscoverModels(context.Background(), gatewayAt(srv.URL, "sk-gateway"))
+	if !d.Supported || !d.Native {
+		t.Fatalf("Discovery = %+v, want Supported and Native", d)
+	}
+	if len(d.Models) != 2 {
+		t.Errorf("Models = %v", d.Models)
+	}
+}
+
+func TestDiscoverModels_ForeignModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"id":"claude-3-5-sonnet"},{"id":"gpt-4o"},{"id":"llama-3-70b"}]}`))
+	}))
+	defer srv.Close()
+
+	a := adapter{}
+	d := a.DiscoverModels(context.Background(), gatewayAt(srv.URL, "sk-gateway"))
+	if !d.Supported {
+		t.Fatal("expected the models list to be Supported")
+	}
+	if d.Native {
+		t.Error("a mixed multi-provider models list should not be reported as Native")
+	}
+	if len(d.Models) != 3 {
+		t.Errorf("Models = %v", d.Models)
+	}
+}
+
+func TestDiscoverModels_UnsupportedEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	a := adapter{}
+	d := a.DiscoverModels(context.Background(), gatewayAt(srv.URL, "sk-gateway"))
+	if d.Supported {
+		t.Errorf("expected an unsupported endpoint to report Supported=false, got %+v", d)
+	}
+}
+
+func gatewayAt(baseURL, apiKey string) gateway.Gateway {
+	return gateway.Gateway{BaseURL: baseURL, APIKey: apiKey}
 }
 
 func TestBuild_DoesNotMutateBaseEnv(t *testing.T) {

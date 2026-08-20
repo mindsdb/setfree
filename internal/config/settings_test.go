@@ -110,3 +110,49 @@ func TestSettings_DefaultGatewayNaming(t *testing.T) {
 		t.Errorf("DefaultGateway changed to %q after adding a second gateway", s.DefaultGateway)
 	}
 }
+
+func TestCLISetting_ModelDiscoveryFields_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := &Settings{}
+	s.SetGatewayBaseURL(DefaultGatewayName, "https://gw.example.com")
+	s.CLI = map[string]CLISetting{
+		"claude": {ModelDiscovery: true, ModelResolved: true},
+		"codex":  {Model: "gpt-5", ModelResolved: true},
+	}
+	if err := Save(dir, s); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := loaded.CLI["claude"]; !got.ModelDiscovery || !got.ModelResolved || got.Model != "" {
+		t.Errorf("claude setting = %+v", got)
+	}
+	if got := loaded.CLI["codex"]; got.Model != "gpt-5" || !got.ModelResolved || got.ModelDiscovery {
+		t.Errorf("codex setting = %+v", got)
+	}
+}
+
+func TestSetGatewayBaseURL_ChangingURLClearsModelChoices(t *testing.T) {
+	s := &Settings{}
+	s.SetGatewayBaseURL(DefaultGatewayName, "https://old.example.com")
+	s.CLI = map[string]CLISetting{
+		"claude": {ModelDiscovery: true, ModelResolved: true},
+		"codex":  {Model: "gpt-5", ModelResolved: true},
+	}
+
+	// Setting the SAME url again must not wipe out what was just learned.
+	s.SetGatewayBaseURL(DefaultGatewayName, "https://old.example.com")
+	if len(s.CLI) != 2 {
+		t.Fatalf("re-setting the same base URL should not clear model choices, CLI = %+v", s.CLI)
+	}
+
+	// Changing to a DIFFERENT url must invalidate every CLI's model choice:
+	// a different endpoint may serve entirely different models.
+	s.SetGatewayBaseURL(DefaultGatewayName, "https://new.example.com")
+	if len(s.CLI) != 0 {
+		t.Errorf("changing base URL should clear model choices, CLI = %+v", s.CLI)
+	}
+}

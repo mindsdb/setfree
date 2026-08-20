@@ -20,6 +20,8 @@
 package claude
 
 import (
+	"context"
+
 	"github.com/mindsdb/setfree/internal/adapters"
 	"github.com/mindsdb/setfree/internal/envutil"
 	"github.com/mindsdb/setfree/internal/gateway"
@@ -31,6 +33,11 @@ const (
 	envAPIKey    = "ANTHROPIC_API_KEY"
 	envModel     = "ANTHROPIC_MODEL"
 )
+
+// nativeModelPrefixes are how Anthropic names its own models. A gateway
+// whose models list is entirely prefixed like this is one where Claude
+// Code's own `/model` picker can be trusted to work correctly.
+var nativeModelPrefixes = []string{"claude", "anthropic"}
 
 type adapter struct{}
 
@@ -50,4 +57,12 @@ func (adapter) Build(baseEnv []string, resolved gateway.Resolved) (adapters.Buil
 		env = envutil.Set(env, envModel, resolved.Model)
 	}
 	return adapters.Build{Env: env}, nil
+}
+
+func (adapter) DiscoverModels(ctx context.Context, gw gateway.Gateway) adapters.Discovery {
+	return adapters.ProbeModels(ctx, gw.BaseURL, map[string]string{
+		"Authorization":     "Bearer " + gw.APIKey,
+		"x-api-key":         gw.APIKey, // hedge: real Anthropic-style gateways expect this instead
+		"anthropic-version": "2023-06-01",
+	}, nativeModelPrefixes)
 }

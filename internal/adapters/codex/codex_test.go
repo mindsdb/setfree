@@ -1,6 +1,9 @@
 package codex
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -96,5 +99,50 @@ func TestBuild_ModelOverrideIsOptional(t *testing.T) {
 	})
 	if v, ok := argValue(t, build.Args, "model"); !ok || v != `"gpt-5"` {
 		t.Errorf("model = %s, %v", v, ok)
+	}
+}
+
+func TestDiscoverModels_NativeOpenAIModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer sk-gateway" {
+			t.Errorf("missing/wrong Authorization header: %q", r.Header.Get("Authorization"))
+		}
+		w.Write([]byte(`{"data":[{"id":"gpt-4o"},{"id":"o1-preview"}]}`))
+	}))
+	defer srv.Close()
+
+	a := adapter{}
+	d := a.DiscoverModels(context.Background(), gateway.Gateway{BaseURL: srv.URL, APIKey: "sk-gateway"})
+	if !d.Supported || !d.Native {
+		t.Fatalf("Discovery = %+v, want Supported and Native", d)
+	}
+}
+
+func TestDiscoverModels_ForeignModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"id":"gpt-4o"},{"id":"claude-3-5-sonnet"}]}`))
+	}))
+	defer srv.Close()
+
+	a := adapter{}
+	d := a.DiscoverModels(context.Background(), gateway.Gateway{BaseURL: srv.URL, APIKey: "sk-gateway"})
+	if !d.Supported {
+		t.Fatal("expected the models list to be Supported")
+	}
+	if d.Native {
+		t.Error("a mixed multi-provider models list should not be reported as Native")
+	}
+}
+
+func TestDiscoverModels_UnsupportedEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	a := adapter{}
+	d := a.DiscoverModels(context.Background(), gateway.Gateway{BaseURL: srv.URL, APIKey: "sk-gateway"})
+	if d.Supported {
+		t.Errorf("expected an unsupported endpoint to report Supported=false, got %+v", d)
 	}
 }
