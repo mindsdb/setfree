@@ -22,13 +22,17 @@ import (
 //   - the models found all look native to that CLI's usual provider: say
 //     so and leave the model unset, trusting the CLI's own picker.
 //   - they don't: show the list and ask which one to use.
-//   - the gateway doesn't support listing at all: skip silently, exactly
-//     like SetFree behaved before this existed.
+//   - the gateway doesn't support listing at all: the CLI's own model
+//     picker can't be trusted either (it relies on that same endpoint),
+//     so ask for a model name directly instead of launching with
+//     whatever the CLI/gateway happens to default to.
 //
-// The outcome (including "skipped") is remembered so this never runs
-// again for the same CLI and gateway. It reports whether it actually
-// interacted with the user (so the caller can decide whether to break
-// launch's usual silence).
+// The outcome is remembered so this never runs again for the same CLI and
+// gateway — except when the endpoint doesn't support listing, which asks
+// again on every launch, since that endpoint being down today says
+// nothing about tomorrow. It reports whether it actually interacted with
+// the user (so the caller can decide whether to break launch's usual
+// silence).
 func resolveModel(e *env, a adapters.Adapter, gw gateway.Gateway) (interacted bool, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -38,10 +42,19 @@ func resolveModel(e *env, a adapters.Adapter, gw gateway.Gateway) (interacted bo
 
 	switch {
 	case !discovery.Supported:
-		// Nothing to offer. Don't mark it resolved either — a gateway
-		// that's briefly unreachable deserves another try next launch,
-		// not a permanent "we already asked" verdict.
-		return false, nil
+		// No list to offer, and the CLI's own picker needs that same
+		// endpoint, so it can't be trusted either. Ask directly instead
+		// of silently launching with whatever default applies. This
+		// deliberately does not set ModelResolved: an endpoint that's
+		// down today might work tomorrow, so it asks again next launch
+		// rather than settling on a permanent verdict.
+		reader := terminal.NewReader(os.Stdin)
+		choice, promptErr := ui.PromptModelName(os.Stdout, reader, a.DisplayName())
+		if promptErr != nil {
+			return false, promptErr
+		}
+		setting.Model = choice
+		interacted = true
 
 	case discovery.Native:
 		setting.ModelDiscovery = true

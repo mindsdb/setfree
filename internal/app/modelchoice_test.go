@@ -43,19 +43,64 @@ func newTestEnv(t *testing.T) *env {
 	}
 }
 
-func TestResolveModel_UnsupportedEndpoint_NoInteractionNoPersistence(t *testing.T) {
+func TestResolveModel_UnsupportedEndpoint_PromptsForModelName(t *testing.T) {
 	e := newTestEnv(t)
 	a := fakeAdapter{name: "claude", discovery: adapters.Discovery{Supported: false}}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = orig })
+	go func() {
+		io.WriteString(w, "custom-model\n")
+		w.Close()
+	}()
 
 	interacted, err := resolveModel(e, a, gateway.Gateway{BaseURL: "https://gw.example.com"})
 	if err != nil {
 		t.Fatalf("resolveModel: %v", err)
 	}
-	if interacted {
-		t.Error("an unsupported endpoint should not count as user interaction")
+	if !interacted {
+		t.Error("prompting for a model name should count as user interaction")
 	}
-	if e.settings.CLI["claude"].ModelResolved {
-		t.Error("an unsupported endpoint should not be marked resolved, so it's retried later")
+	got := e.settings.CLI["claude"]
+	if got.Model != "custom-model" {
+		t.Errorf("Model = %q, want %q", got.Model, "custom-model")
+	}
+	if got.ModelResolved {
+		t.Error("an unsupported endpoint should not be marked resolved, so it's asked again next launch")
+	}
+}
+
+func TestResolveModel_UnsupportedEndpoint_SkipLeavesModelEmpty(t *testing.T) {
+	e := newTestEnv(t)
+	a := fakeAdapter{name: "claude", discovery: adapters.Discovery{Supported: false}}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = orig })
+	go func() {
+		io.WriteString(w, "\n") // blank: skip pinning a model
+		w.Close()
+	}()
+
+	interacted, err := resolveModel(e, a, gateway.Gateway{BaseURL: "https://gw.example.com"})
+	if err != nil {
+		t.Fatalf("resolveModel: %v", err)
+	}
+	if !interacted {
+		t.Error("even a skipped prompt should count as user interaction")
+	}
+	got := e.settings.CLI["claude"]
+	if got.Model != "" || got.ModelResolved {
+		t.Errorf("claude setting = %+v, want Model empty and ModelResolved false", got)
 	}
 }
 
