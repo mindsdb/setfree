@@ -55,10 +55,11 @@ func MenuHeader(w io.Writer, c terminal.Colors, s Status) {
 // MenuOptions are the numbered choices in the config menu.
 const MenuOptions = `What would you like to change?
 
-  1. Base URL
-  2. API key
-  3. Reset configuration
-  4. Done
+  1. Gateway
+  2. Base URL
+  3. API key
+  4. Reset configuration
+  5. Done
 `
 
 // ConfirmReset renders the reset confirmation prompt.

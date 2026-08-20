@@ -1,0 +1,85 @@
+package config
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestProviders_ShapeAndOrder(t *testing.T) {
+	got := Providers()
+	want := []string{"mindshub", "openrouter", "litellm", "custom"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d providers, want %d", len(got), len(want))
+	}
+	for i, key := range want {
+		if got[i].Key != key {
+			t.Errorf("provider %d = %q, want %q", i, got[i].Key, key)
+		}
+	}
+}
+
+// Hosted providers can skip straight to auth; self-hosted ones have no
+// canonical address, so setup has to ask.
+func TestProviders_NeedsBaseURL(t *testing.T) {
+	cases := map[string]bool{
+		"mindshub":   false,
+		"openrouter": false,
+		"litellm":    true,
+		"custom":     true,
+	}
+	for key, wantPrompt := range cases {
+		p, ok := FindProvider(key)
+		if !ok {
+			t.Fatalf("provider %q is missing", key)
+		}
+		if p.NeedsBaseURL() != wantPrompt {
+			t.Errorf("%s: NeedsBaseURL() = %v, want %v", key, p.NeedsBaseURL(), wantPrompt)
+		}
+	}
+}
+
+func TestProviders_OnlyMindsHubUsesSSO(t *testing.T) {
+	for _, p := range Providers() {
+		if want := p.Key == "mindshub"; p.SSO != want {
+			t.Errorf("%s: SSO = %v, want %v", p.Key, p.SSO, want)
+		}
+	}
+}
+
+// All three MindsHub hosts derive from one domain, so pointing at staging
+// can't leave auth and inference disagreeing about which deployment
+// they're talking to.
+func TestMindsHubDomain_OverrideMovesEveryHostTogether(t *testing.T) {
+	t.Setenv(EnvMindsHubDomain, "staging.mindshub.ai")
+
+	p, _ := FindProvider("mindshub")
+	if p.BaseURL != "https://api.staging.mindshub.ai" {
+		t.Errorf("gateway = %q", p.BaseURL)
+	}
+	if got := MindsHubOIDC().Issuer; got != "https://auth.staging.mindshub.ai/auth" {
+		t.Errorf("issuer = %q", got)
+	}
+	if got := MindsHubAuthAPI(); got != "https://auth.staging.mindshub.ai/v1" {
+		t.Errorf("auth API = %q", got)
+	}
+}
+
+func TestMindsHubDefaultsToProduction(t *testing.T) {
+	t.Setenv(EnvMindsHubDomain, "")
+
+	p, _ := FindProvider("mindshub")
+	for _, s := range []string{p.BaseURL, MindsHubOIDC().Issuer, MindsHubAuthAPI()} {
+		if strings.Contains(s, "staging") {
+			t.Errorf("%q should point at production by default", s)
+		}
+	}
+	if got := MindsHubOIDC().ClientID; got != "anton-desktop" {
+		t.Errorf("client id = %q", got)
+	}
+}
+
+func TestFindProvider_Unknown(t *testing.T) {
+	if _, ok := FindProvider("nope"); ok {
+		t.Error("expected an unknown key to report not-found")
+	}
+}

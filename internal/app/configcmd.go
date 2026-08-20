@@ -180,6 +180,29 @@ func cmdConfigMenu() int {
 
 		switch strings.TrimSpace(choice) {
 		case "1":
+			// Picking a gateway re-runs the whole connect flow, so a
+			// provider with browser sign-in re-authenticates rather than
+			// silently keeping a key issued for a different endpoint.
+			name := currentGatewayName(e)
+			provider, err := ui.PromptProvider(os.Stdout, os.Stdin, e.colors, reader)
+			if err != nil {
+				return 0
+			}
+			baseURL, key, err := ui.ConnectProvider(os.Stdout, e.colors, provider, reader, reader)
+			if err != nil {
+				return 0
+			}
+			e.settings.SetGatewayBaseURL(name, baseURL)
+			if err := config.Save(e.dir, e.settings); err != nil {
+				return fail(err)
+			}
+			if key != "" {
+				if err := e.store.Set(name, key); err != nil {
+					return fail(err)
+				}
+			}
+			fmt.Printf("%s Gateway updated\n", e.colors.Green(terminal.Check))
+		case "2":
 			name := currentGatewayName(e)
 			baseURL, err := ui.PromptBaseURL(os.Stdout, reader)
 			if err != nil {
@@ -189,7 +212,7 @@ func cmdConfigMenu() int {
 			if err := config.Save(e.dir, e.settings); err != nil {
 				return fail(err)
 			}
-		case "2":
+		case "3":
 			name := currentGatewayName(e)
 			key, err := ui.PromptAPIKey(os.Stdout, reader)
 			if err != nil {
@@ -198,7 +221,7 @@ func cmdConfigMenu() int {
 			if err := e.store.Set(name, key); err != nil {
 				return fail(err)
 			}
-		case "3":
+		case "4":
 			fmt.Print(ui.ConfirmResetPrompt)
 			answer, _ := reader.ReadLine()
 			if isYes(answer) {
@@ -211,10 +234,10 @@ func cmdConfigMenu() int {
 				e.settings = &config.Settings{Version: config.CurrentVersion}
 				fmt.Println("✓ Configuration reset")
 			}
-		case "4", "":
+		case "5", "":
 			return 0
 		default:
-			fmt.Println("Please choose 1-4.")
+			fmt.Println("Please choose 1-5.")
 		}
 		fmt.Println()
 	}

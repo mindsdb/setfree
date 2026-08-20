@@ -38,6 +38,9 @@ const (
 	ansiBold  = "\x1b[1m"
 	ansiGreen = "\x1b[32m"
 	ansiRed   = "\x1b[31m"
+
+	ansiHideCursor = "\x1b[?25l"
+	ansiShowCursor = "\x1b[?25h"
 )
 
 func (c Colors) wrap(code, s string) string {

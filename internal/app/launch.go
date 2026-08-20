@@ -111,7 +111,7 @@ func runFirstTimeSetup(e *env, cliName string) (gateway.Resolved, error) {
 	}
 
 	reader := terminal.NewReader(os.Stdin)
-	baseURL, apiKey, err := ui.RunSetup(os.Stdout, e.colors, reader, reader)
+	baseURL, apiKey, err := ui.RunSetup(os.Stdout, os.Stdin, e.colors, reader, reader)
 	if err != nil {
 		return gateway.Resolved{}, err
 	}

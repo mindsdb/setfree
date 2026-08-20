@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/mindsdb/setfree/internal/gateway"
 	"github.com/mindsdb/setfree/internal/terminal"
@@ -27,7 +28,7 @@ var ErrSetupCancelled = errors.New("setup cancelled")
 // know what a successful response looks like for an arbitrary gateway, and
 // a fake-looking check would be worse than none. It only validates that the
 // base URL is well-formed.
-func RunSetup(w io.Writer, c terminal.Colors, lines LineReader, passwords PasswordReader) (baseURL, apiKey string, err error) {
+func RunSetup(w io.Writer, in *os.File, c terminal.Colors, lines LineReader, passwords PasswordReader) (baseURL, apiKey string, err error) {
 	fmt.Fprintln(w, Robot)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Welcome to SetFree.")
@@ -35,16 +36,14 @@ func RunSetup(w io.Writer, c terminal.Colors, lines LineReader, passwords Passwo
 	fmt.Fprintln(w, "No LLM gateway is configured yet. Let's connect one.")
 	fmt.Fprintln(w)
 
-	baseURL, err = promptBaseURL(w, lines)
+	provider, err := PromptProvider(w, in, c, lines)
 	if err != nil {
 		return "", "", err
 	}
 
-	fmt.Fprintln(w)
-	fmt.Fprint(w, "API key\n> ")
-	apiKey, err = passwords.ReadPassword()
+	baseURL, apiKey, err = ConnectProvider(w, c, provider, lines, passwords)
 	if err != nil {
-		return "", "", ErrSetupCancelled
+		return "", "", err
 	}
 
 	fmt.Fprintln(w)
@@ -54,10 +53,6 @@ func RunSetup(w io.Writer, c terminal.Colors, lines LineReader, passwords Passwo
 	fmt.Fprintln(w)
 
 	return baseURL, apiKey, nil
-}
-
-func promptBaseURL(w io.Writer, lines LineReader) (string, error) {
-	return PromptBaseURL(w, lines)
 }
 
 // PromptBaseURL prompts for and validates a base URL, retrying on invalid
