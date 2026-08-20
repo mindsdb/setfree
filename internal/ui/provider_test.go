@@ -89,6 +89,53 @@ func TestPromptProvider_RetriesOnGarbage(t *testing.T) {
 	}
 }
 
+// setfree config's picker adds a fifth row for wiping configuration
+// entirely, alongside the four provider presets.
+func TestPromptProviderOrReset_ListsResetAlongsideProviders(t *testing.T) {
+	var buf bytes.Buffer
+	r := &scriptedReader{lines: []string{"5"}}
+
+	_, reset, err := PromptProviderOrReset(&buf, r, terminal.Colors{})
+	if err != nil {
+		t.Fatalf("PromptProviderOrReset: %v", err)
+	}
+	if !reset {
+		t.Error("expected row 5 to select reset")
+	}
+	if !strings.Contains(buf.String(), "5. Reset configuration") {
+		t.Errorf("expected reset to be listed as row 5:\n%s", buf.String())
+	}
+}
+
+func TestPromptProviderOrReset_PickingAProviderReportsNoReset(t *testing.T) {
+	var buf bytes.Buffer
+	r := &scriptedReader{lines: []string{"1"}}
+
+	p, reset, err := PromptProviderOrReset(&buf, r, terminal.Colors{})
+	if err != nil {
+		t.Fatalf("PromptProviderOrReset: %v", err)
+	}
+	if reset {
+		t.Error("picking a provider must not also report reset")
+	}
+	if p.Key != "mindshub" {
+		t.Errorf("picked %q, want mindshub", p.Key)
+	}
+}
+
+func TestPromptProviderOrReset_AcceptsResetByName(t *testing.T) {
+	var buf bytes.Buffer
+	r := &scriptedReader{lines: []string{"reset"}}
+
+	_, reset, err := PromptProviderOrReset(&buf, r, terminal.Colors{})
+	if err != nil {
+		t.Fatalf("PromptProviderOrReset: %v", err)
+	}
+	if !reset {
+		t.Error("expected \"reset\" to select the reset row")
+	}
+}
+
 // The SSO provider has a fixed address, so setup should never ask for one.
 func TestConnectProvider_SSOSkipsBaseURLAndStoresIssuedKey(t *testing.T) {
 	stubSSO(t, "jwt", "mdb_issued", nil, nil)

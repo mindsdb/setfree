@@ -18,52 +18,111 @@ import (
 // accept the same digits, so scripted input works either way.
 func PromptProvider(w io.Writer, lines LineReader, c terminal.Colors) (config.Provider, error) {
 	providers := config.Providers()
-
 	fmt.Fprintln(w, "Which gateway do you want to use?")
 	fmt.Fprintln(w)
 
-	if selector, ok := lines.(terminal.Selector); ok {
-		choices := make([]terminal.Choice, len(providers))
-		for i, p := range providers {
-			choices[i] = terminal.Choice{Label: p.DisplayName, Detail: p.Detail}
-		}
+	idx, err := pickFromList(w, lines, c, providerChoices(providers))
+	if err != nil {
+		return config.Provider{}, err
+	}
+	return providers[idx], nil
+}
 
-		idx, err := selector.Select(w, c, choices, 0)
+const resetChoiceLabel = "Reset configuration"
+
+// PromptProviderOrReset is the entry point for `setfree config`: there's no
+// settings menu above it — choosing a gateway to (re)connect and wiping
+// SetFree's configuration entirely both live in the same list.
+func PromptProviderOrReset(w io.Writer, lines LineReader, c terminal.Colors) (provider config.Provider, reset bool, err error) {
+	providers := config.Providers()
+	fmt.Fprintln(w, "Which gateway do you want to use?")
+	fmt.Fprintln(w)
+
+	choices := providerChoices(providers)
+	choices = append(choices, choice{
+		terminal.Choice{Label: resetChoiceLabel, Detail: "remove your saved gateway and API key"},
+		[]string{"reset", resetChoiceLabel},
+	})
+
+	idx, err := pickFromList(w, lines, c, choices)
+	if err != nil {
+		return config.Provider{}, false, err
+	}
+	if idx == len(providers) {
+		return config.Provider{}, true, nil
+	}
+	return providers[idx], false, nil
+}
+
+// choice pairs what a picker row displays with the extra strings (a
+// provider's key, its full name) that also match it in the numbered
+// fallback — so typing "litellm" works the same as typing its number.
+type choice struct {
+	terminal.Choice
+	aliases []string
+}
+
+func providerChoices(providers []config.Provider) []choice {
+	choices := make([]choice, len(providers))
+	for i, p := range providers {
+		choices[i] = choice{
+			terminal.Choice{Label: p.DisplayName, Detail: p.Detail},
+			[]string{p.Key, p.DisplayName},
+		}
+	}
+	return choices
+}
+
+// pickFromList drives an arrow-key picker over choices when lines is backed
+// by a real terminal (it satisfies terminal.Selector), falling back to a
+// numbered prompt otherwise.
+func pickFromList(w io.Writer, lines LineReader, c terminal.Colors, choices []choice) (int, error) {
+	if selector, ok := lines.(terminal.Selector); ok {
+		rows := make([]terminal.Choice, len(choices))
+		for i, ch := range choices {
+			rows[i] = ch.Choice
+		}
+		idx, err := selector.Select(w, c, rows, 0)
 		switch {
 		case err == nil:
 			fmt.Fprintln(w)
-			return providers[idx], nil
+			return idx, nil
 		case err == terminal.ErrSelectCancelled:
-			return config.Provider{}, ErrSetupCancelled
+			return 0, ErrSetupCancelled
 		case err != terminal.ErrNotInteractive:
-			return config.Provider{}, err
+			return 0, err
 		}
 		// ErrNotInteractive: fall through to the numbered prompt below.
 	}
 
-	// No terminal to drive: fall back to a plain numbered prompt.
-	for i, p := range providers {
-		fmt.Fprintf(w, "  %d. %s  (%s)\n", i+1, p.DisplayName, p.Detail)
+	for i, ch := range choices {
+		if ch.Detail != "" {
+			fmt.Fprintf(w, "  %d. %s  (%s)\n", i+1, ch.Label, ch.Detail)
+		} else {
+			fmt.Fprintf(w, "  %d. %s\n", i+1, ch.Label)
+		}
 	}
 	fmt.Fprintln(w)
 	for {
 		fmt.Fprint(w, "> ")
 		raw, err := lines.ReadLine()
 		if err != nil {
-			return config.Provider{}, ErrSetupCancelled
+			return 0, ErrSetupCancelled
 		}
 		raw = strings.TrimSpace(raw)
-		if n, convErr := strconv.Atoi(raw); convErr == nil && n >= 1 && n <= len(providers) {
+		if n, convErr := strconv.Atoi(raw); convErr == nil && n >= 1 && n <= len(choices) {
 			fmt.Fprintln(w)
-			return providers[n-1], nil
+			return n - 1, nil
 		}
-		for _, p := range providers {
-			if strings.EqualFold(p.Key, raw) || strings.EqualFold(p.DisplayName, raw) {
-				fmt.Fprintln(w)
-				return p, nil
+		for i, ch := range choices {
+			for _, alias := range ch.aliases {
+				if strings.EqualFold(alias, raw) {
+					fmt.Fprintln(w)
+					return i, nil
+				}
 			}
 		}
-		fmt.Fprintf(w, "  Enter a number from 1-%d.\n", len(providers))
+		fmt.Fprintf(w, "  Enter a number from 1-%d.\n", len(choices))
 	}
 }
 

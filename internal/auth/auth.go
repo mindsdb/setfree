@@ -26,6 +26,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -116,6 +117,7 @@ func Login(ctx context.Context, cfg Config, notify func(string)) (string, error)
 			results <- result{err: fmt.Errorf("no authorization code in callback")}
 			return
 		}
+		go activateTerminal() // best-effort; osascript's latency shouldn't hold up the response
 		writeBrowserPage(w, "You're signed in", "You can close this tab and return to your terminal.")
 		results <- result{code: code}
 	})}
@@ -247,6 +249,45 @@ var openBrowser = func(target string) error {
 		cmd = "xdg-open"
 	}
 	return exec.Command(cmd, append(args, target)...).Start()
+}
+
+// terminalBundleIDs maps a terminal emulator's TERM_PROGRAM value to its
+// macOS application bundle ID, for activateTerminal. Bundle IDs survive an
+// app being renamed; matching on the app's display name wouldn't.
+var terminalBundleIDs = map[string]string{
+	"Apple_Terminal": "com.apple.Terminal",
+	"iTerm.app":      "com.googlecode.iterm2",
+	"WezTerm":        "com.github.wez.wezterm",
+	"Hyper":          "co.zeit.hyper",
+	"WarpTerminal":   "dev.warp.Warp-Stable",
+	"vscode":         "com.microsoft.VSCode",
+}
+
+// activateTerminal makes a best-effort attempt to bring the terminal that
+// launched SetFree back to the foreground once sign-in completes, so the
+// user isn't left looking at the browser tab. It only knows how to do this
+// on macOS, and only for a terminal it recognizes via TERM_PROGRAM — an
+// unset or unrecognized value means it does nothing rather than guess and
+// activate the wrong application.
+//
+// This activates the whole app, not the specific window or tab that ran
+// setfree — the best a single osascript call can do without much deeper,
+// per-terminal window scripting. Good enough when only one window is open,
+// which is the common case for a fresh sign-in.
+var activateTerminal = func() {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	bundleID, ok := terminalBundleID(os.Getenv("TERM_PROGRAM"))
+	if !ok {
+		return
+	}
+	exec.Command("osascript", "-e", fmt.Sprintf(`tell application id %q to activate`, bundleID)).Run()
+}
+
+func terminalBundleID(termProgram string) (string, bool) {
+	id, ok := terminalBundleIDs[termProgram]
+	return id, ok
 }
 
 func writeBrowserPage(w http.ResponseWriter, title, detail string) {

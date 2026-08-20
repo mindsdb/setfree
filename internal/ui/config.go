@@ -29,8 +29,8 @@ func ShowStatus(w io.Writer, s Status) {
 	fmt.Fprintf(w, "API key:     %s\n", key)
 }
 
-// MenuHeader renders the small settings screen shown before the numbered
-// edit menu in `setfree config`.
+// MenuHeader renders the small settings screen shown before the gateway
+// picker in `setfree config`.
 func MenuHeader(w io.Writer, c terminal.Colors, s Status) {
 	fmt.Fprintln(w, Robot)
 	fmt.Fprintln(w)
@@ -51,16 +51,6 @@ func MenuHeader(w io.Writer, c terminal.Colors, s Status) {
 	}
 	fmt.Fprintln(w)
 }
-
-// MenuOptions are the numbered choices in the config menu.
-const MenuOptions = `What would you like to change?
-
-  1. Gateway
-  2. Base URL
-  3. API key
-  4. Reset configuration
-  5. Done
-`
 
 // ConfirmReset renders the reset confirmation prompt.
 const ConfirmResetPrompt = "Reset SetFree configuration? This removes your saved gateway and API key. [y/N] "

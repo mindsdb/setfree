@@ -13,6 +13,13 @@ import (
 	"time"
 )
 
+// Never let a real successful callback shell out to osascript during tests
+// — running the suite inside an actual terminal (iTerm, VS Code, ...) would
+// otherwise steal window focus every time TestLogin_HappyPath runs.
+func init() {
+	activateTerminal = func() {}
+}
+
 // stubBrowser replaces the real browser launch for the duration of a test,
 // optionally handing the authorize URL to visit back to the caller.
 func stubBrowser(t *testing.T, visit func(authURL string)) {
@@ -203,6 +210,21 @@ func TestCreateAPIKey(t *testing.T) {
 	}
 	if key != "mdb_abc123" {
 		t.Errorf("key = %q", key)
+	}
+}
+
+func TestTerminalBundleID_KnownAndUnknown(t *testing.T) {
+	if id, ok := terminalBundleID("iTerm.app"); !ok || id != "com.googlecode.iterm2" {
+		t.Errorf("iTerm.app -> %q, %v", id, ok)
+	}
+	if id, ok := terminalBundleID("Apple_Terminal"); !ok || id != "com.apple.Terminal" {
+		t.Errorf("Apple_Terminal -> %q, %v", id, ok)
+	}
+	if _, ok := terminalBundleID(""); ok {
+		t.Error("an unset TERM_PROGRAM must not match, or activateTerminal would guess an app")
+	}
+	if _, ok := terminalBundleID("SomeFutureTerminal"); ok {
+		t.Error("an unrecognized TERM_PROGRAM must not match")
 	}
 }
 
