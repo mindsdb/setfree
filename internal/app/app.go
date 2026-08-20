@@ -75,7 +75,7 @@ func cmdLanding() int {
 	if err != nil {
 		return fail(err)
 	}
-	ui.Landing(os.Stdout, e.colors, e.resolver())
+	ui.Landing(os.Stdout, e.colors, e.resolver(), terminal.IsTTY(os.Stdout))
 	return 0
 }
 
