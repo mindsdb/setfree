@@ -211,6 +211,12 @@ func cmdConfigMenu() int {
 				return fail(err)
 			}
 		}
+		// After SetGatewayBaseURL, which clears any remembered model
+		// choice when the URL actually changed — otherwise this would
+		// immediately wipe out the default it's about to set.
+		if err := applyProviderDefaultModel(e, provider); err != nil {
+			return fail(err)
+		}
 		fmt.Printf("%s Gateway updated\n", e.colors.Green(terminal.Check))
 		fmt.Println()
 	}

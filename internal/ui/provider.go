@@ -65,8 +65,12 @@ type choice struct {
 func providerChoices(providers []config.Provider) []choice {
 	choices := make([]choice, len(providers))
 	for i, p := range providers {
+		label := p.DisplayName
+		if p.Recommended {
+			label += " (recommended)"
+		}
 		choices[i] = choice{
-			terminal.Choice{Label: p.DisplayName, Detail: p.Detail},
+			terminal.Choice{Label: label, Detail: p.Detail},
 			[]string{p.Key, p.DisplayName},
 		}
 	}

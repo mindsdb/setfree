@@ -31,6 +31,14 @@ type Provider struct {
 	// SSO reports whether this provider signs in through a browser rather
 	// than a pasted API key.
 	SSO bool
+	// Recommended marks the preset the picker should steer people toward.
+	// At most one provider should set this.
+	Recommended bool
+	// DefaultModel, if set, is pinned as the starting model for every
+	// known CLI as soon as this provider is connected — rather than left
+	// unset for that CLI's own hardcoded default, which usually names a
+	// specific vendor's model this gateway may not even serve.
+	DefaultModel string
 }
 
 // NeedsBaseURL reports whether setup must prompt for an address.
@@ -54,10 +62,11 @@ func mindsHubDomain() string {
 // this constant plus a realm entry, nothing more.
 func MindsHubOIDC() auth.Config {
 	return auth.Config{
-		Issuer:   fmt.Sprintf("https://auth.%s/auth", mindsHubDomain()),
-		Realm:    "mindsdb",
-		ClientID: "anton-desktop",
-		Scopes:   []string{"openid", "profile", "email"},
+		Issuer:          fmt.Sprintf("https://auth.%s/auth", mindsHubDomain()),
+		Realm:           "mindsdb",
+		ClientID:        "anton-desktop",
+		Scopes:          []string{"openid", "profile", "email"},
+		SuccessRedirect: MindsHubConsoleURL(),
 	}
 }
 
@@ -67,15 +76,24 @@ func MindsHubAuthAPI() string {
 	return fmt.Sprintf("https://auth.%s/v1", mindsHubDomain())
 }
 
+// MindsHubConsoleURL returns the web console's address, so the browser can
+// be sent there once sign-in completes rather than left on a bare
+// confirmation page.
+func MindsHubConsoleURL() string {
+	return fmt.Sprintf("https://console.%s", mindsHubDomain())
+}
+
 // Providers are the gateway presets offered at setup, in display order.
 func Providers() []Provider {
 	return []Provider{
 		{
-			Key:         "mindshub",
-			DisplayName: "MindsHub",
-			Detail:      "sign in with your browser",
-			BaseURL:     fmt.Sprintf("https://api.%s", mindsHubDomain()),
-			SSO:         true,
+			Key:          "mindshub",
+			DisplayName:  "MindsHub",
+			Detail:       "all models in one place, open and closed — sign in with your browser",
+			BaseURL:      fmt.Sprintf("https://api.%s", mindsHubDomain()),
+			SSO:          true,
+			Recommended:  true,
+			DefaultModel: "mindshub_air",
 		},
 		{
 			Key:         "openrouter",

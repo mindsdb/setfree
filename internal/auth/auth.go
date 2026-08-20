@@ -45,6 +45,10 @@ type Config struct {
 	ClientID string
 	// Scopes requested at authorize time.
 	Scopes []string
+	// SuccessRedirect, if set, is where the browser is sent after a
+	// successful sign-in — a product console, say — instead of staying on
+	// the plain "you can close this tab" page.
+	SuccessRedirect string
 }
 
 func (c Config) endpoint(name string) string {
@@ -118,7 +122,7 @@ func Login(ctx context.Context, cfg Config, notify func(string)) (string, error)
 			return
 		}
 		go activateTerminal() // best-effort; osascript's latency shouldn't hold up the response
-		writeBrowserPage(w, "You're signed in", "You can close this tab and return to your terminal.")
+		writeSuccessPage(w, cfg.SuccessRedirect)
 		results <- result{code: code}
 	})}
 	go server.Serve(listener)
@@ -296,6 +300,25 @@ func writeBrowserPage(w http.ResponseWriter, title, detail string) {
 <style>body{font:16px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#0f0f10;color:#eee}
 div{text-align:center}p{color:#999}</style>
 <div><h1>%s</h1><p>%s</p></div>`, title, title, detail)
+}
+
+// writeSuccessPage renders the page shown right after sign-in completes.
+// With no redirect configured it's the plain "you can close this tab"
+// message; with one, it also navigates the browser there after a brief
+// pause, so a provider with its own web console (MindsHub's, say) lands
+// the user there instead of leaving them on a bare confirmation page.
+func writeSuccessPage(w http.ResponseWriter, redirect string) {
+	if redirect == "" {
+		writeBrowserPage(w, "You're signed in", "You can close this tab and return to your terminal.")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>You're signed in</title>
+<meta http-equiv="refresh" content="1;url=%s">
+<style>body{font:16px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#0f0f10;color:#eee}
+div{text-align:center}p{color:#999}</style>
+<div><h1>You're signed in</h1><p>Taking you to the console&hellip;</p></div>
+<script>setTimeout(function(){location.replace(%q)},900)</script>`, redirect, redirect)
 }
 
 // DefaultTimeout bounds a whole sign-in, including time spent waiting on

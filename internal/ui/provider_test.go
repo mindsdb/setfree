@@ -89,6 +89,38 @@ func TestPromptProvider_RetriesOnGarbage(t *testing.T) {
 	}
 }
 
+// The recommended provider gets a visible marker in the fallback list,
+// where there's no highlighted row to carry that signal instead.
+func TestPromptProvider_MarksRecommendedProvider(t *testing.T) {
+	var buf bytes.Buffer
+	r := &scriptedReader{lines: []string{"1"}}
+
+	if _, err := PromptProvider(&buf, r, terminal.Colors{}); err != nil {
+		t.Fatalf("PromptProvider: %v", err)
+	}
+	if !strings.Contains(buf.String(), "MindsHub (recommended)") {
+		t.Errorf("expected MindsHub to be marked recommended:\n%s", buf.String())
+	}
+	if strings.Contains(buf.String(), "OpenRouter (recommended)") {
+		t.Error("only one provider should be marked recommended")
+	}
+}
+
+// Marking a provider recommended must not change what typing its bare name
+// or key matches — the label decoration is display-only.
+func TestPromptProvider_RecommendedSuffixDoesNotBreakNameMatching(t *testing.T) {
+	var buf bytes.Buffer
+	r := &scriptedReader{lines: []string{"mindshub"}}
+
+	p, err := PromptProvider(&buf, r, terminal.Colors{})
+	if err != nil {
+		t.Fatalf("PromptProvider: %v", err)
+	}
+	if p.Key != "mindshub" {
+		t.Errorf("picked %q, want mindshub", p.Key)
+	}
+}
+
 // setfree config's picker adds a fifth row for wiping configuration
 // entirely, alongside the four provider presets.
 func TestPromptProviderOrReset_ListsResetAlongsideProviders(t *testing.T) {

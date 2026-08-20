@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -109,6 +110,73 @@ func TestLogin_HappyPath(t *testing.T) {
 	}
 	if idp.verifier == "" {
 		t.Error("no code_verifier reached the token endpoint")
+	}
+}
+
+// fetchCallbackPage visits authURL's redirect_uri as if returning from the
+// IdP, and hands back the HTML the callback served. It's used instead of a
+// plain shared variable because the visit runs in its own goroutine
+// (stubBrowser spawns it with `go`), with no ordering relative to when
+// Login returns — a bare write-then-read across those two goroutines is a
+// data race even though it usually "works" by timing.
+func fetchCallbackPage(t *testing.T, idp *fakeIDP, cfg Config) string {
+	t.Helper()
+	bodies := make(chan string, 1)
+
+	stubBrowser(t, func(authURL string) {
+		u, _ := url.Parse(authURL)
+		q := u.Query()
+		idp.challenge = q.Get("code_challenge")
+		resp, err := http.Get(q.Get("redirect_uri") + "?code=abc123&state=" + url.QueryEscape(q.Get("state")))
+		if err != nil {
+			t.Errorf("GET callback: %v", err)
+			bodies <- ""
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		bodies <- string(body)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := Login(ctx, cfg, func(string) {}); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+
+	select {
+	case body := <-bodies:
+		return body
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the callback page")
+		return ""
+	}
+}
+
+// A configured SuccessRedirect must actually reach the browser page, since
+// that's what sends the user on to a provider's console after signing in.
+func TestLogin_CallbackPageRedirectsWhenConfigured(t *testing.T) {
+	idp := newFakeIDP(t, "token")
+	cfg := idp.config()
+	cfg.SuccessRedirect = "https://console.example.com"
+
+	body := fetchCallbackPage(t, idp, cfg)
+	if !strings.Contains(body, "https://console.example.com") {
+		t.Errorf("callback page didn't mention the redirect target:\n%s", body)
+	}
+}
+
+// With no SuccessRedirect, the page must just say to close the tab --
+// there's nowhere configured to send the browser.
+func TestLogin_CallbackPageHasNoRedirectByDefault(t *testing.T) {
+	idp := newFakeIDP(t, "token")
+
+	body := fetchCallbackPage(t, idp, idp.config())
+	if strings.Contains(body, `http-equiv="refresh"`) {
+		t.Errorf("expected no redirect meta tag when SuccessRedirect is unset:\n%s", body)
+	}
+	if !strings.Contains(body, "close this tab") {
+		t.Errorf("expected the plain close-this-tab message:\n%s", body)
 	}
 }
 

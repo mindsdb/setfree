@@ -111,7 +111,7 @@ func runFirstTimeSetup(e *env, cliName string) (gateway.Resolved, error) {
 	}
 
 	reader := terminal.NewReader(os.Stdin)
-	baseURL, apiKey, err := ui.RunSetup(os.Stdout, e.colors, reader, reader)
+	baseURL, apiKey, provider, err := ui.RunSetup(os.Stdout, e.colors, reader, reader)
 	if err != nil {
 		return gateway.Resolved{}, err
 	}
@@ -125,6 +125,31 @@ func runFirstTimeSetup(e *env, cliName string) (gateway.Resolved, error) {
 			return gateway.Resolved{}, fmt.Errorf("saving API key: %w", err)
 		}
 	}
+	if err := applyProviderDefaultModel(e, provider); err != nil {
+		return gateway.Resolved{}, err
+	}
 
 	return e.resolver().Resolve(cliName)
+}
+
+// applyProviderDefaultModel pins p's DefaultModel, if it has one, as the
+// starting model for every known CLI — so the very first launch already
+// uses it instead of that CLI's own hardcoded default, which usually names
+// a specific vendor's model this gateway may not even serve. It also marks
+// the choice resolved, so the usual discovery probe (internal/app/
+// modelchoice.go) doesn't run and second-guess it on the next launch.
+func applyProviderDefaultModel(e *env, p config.Provider) error {
+	if p.DefaultModel == "" {
+		return nil
+	}
+	if e.settings.CLI == nil {
+		e.settings.CLI = map[string]config.CLISetting{}
+	}
+	for _, a := range adapters.All() {
+		e.settings.CLI[a.Name()] = config.CLISetting{
+			Model:         p.DefaultModel,
+			ModelResolved: true,
+		}
+	}
+	return config.Save(e.dir, e.settings)
 }
