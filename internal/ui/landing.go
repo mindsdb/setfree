@@ -13,13 +13,9 @@ import (
 // arguments: current gateway status, which coding CLIs are installed, and a
 // couple of next steps. Kept compact — this isn't a dashboard.
 //
-// animate plays the mascot's hatching sequence; callers pass false when
-// output isn't an interactive terminal. It's only used here, not on the
-// screens that redraw in a loop (`setfree config`), where replaying it on
-// every pass would wear thin fast.
-func Landing(w io.Writer, c terminal.Colors, resolver *gateway.Resolver, animate bool) {
-	ShowRobot(w, animate)
-	fmt.Fprintln(w)
+// The mascot is drawn by the caller via ShowRobot, which owns its own
+// trailing blank/status line — so this starts straight in on the wordmark.
+func Landing(w io.Writer, c terminal.Colors, resolver *gateway.Resolver) {
 	fmt.Fprintf(w, "  %s\n", c.Bold("SETFREE"))
 	fmt.Fprintf(w, "  %s\n", c.Dim("Any CLI. Any gateway. Any model."))
 	fmt.Fprintln(w)

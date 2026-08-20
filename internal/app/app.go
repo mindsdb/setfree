@@ -50,7 +50,9 @@ func (e *env) resolver() *gateway.Resolver {
 // code; main() is responsible for os.Exit.
 func Run(args []string) int {
 	if len(args) == 0 {
-		maybeSelfUpdate()
+		// No maybeSelfUpdate() here: the landing screen runs it behind the
+		// mascot animation instead, so the wait is covered rather than
+		// stalling in front of a blank terminal.
 		return cmdLanding()
 	}
 
@@ -75,7 +77,8 @@ func cmdLanding() int {
 	if err != nil {
 		return fail(err)
 	}
-	ui.Landing(os.Stdout, e.colors, e.resolver(), terminal.IsTTY(os.Stdout))
+	ui.ShowRobot(os.Stdout, terminal.IsTTY(os.Stdout), selfUpdateTask)
+	ui.Landing(os.Stdout, e.colors, e.resolver())
 	return 0
 }
 
