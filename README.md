@@ -40,7 +40,6 @@ SetFree also keeps itself current on its own. Once a day it checks whether main 
 
 ```sh
 setfree claude
-setfree claude .
 setfree codex .
 ```
 
@@ -54,20 +53,10 @@ setfree codex . --full-auto
 First run, with no gateway configured, SetFree asks once:
 
 ```
- ,-.
-(o.o)
-|>-<|
-/   \
 
 Welcome to SetFree.
 
 No LLM gateway is configured yet. Let's connect one.
-
-Base URL
-> https://llm.example.com
-
-API key
->
 
 ✓ Settings saved
 
