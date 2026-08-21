@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -308,12 +310,77 @@ div{text-align:center}p{color:#999}</style>
 // out from under the user.
 const successRedirectDelaySeconds = 10
 
+// successPageTemplate is the post-sign-in page. Placeholders ({{URL}},
+// {{HOST}}, {{SECONDS}}) are filled by writeSuccessPage via a string
+// replacer rather than fmt verbs — with this much CSS, every literal "%"
+// would otherwise need escaping and one missed verb silently corrupts the
+// page. The redirect URL reaches the script through a body data attribute,
+// so it only ever needs HTML-attribute escaping, never JS-string escaping.
+const successPageTemplate = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>You’re signed in</title>
+<meta http-equiv="refresh" content="{{SECONDS}};url={{URL}}">
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#e7e9ee;background:#08090b;background-image:radial-gradient(ellipse 90% 55% at 50% -15%,rgba(56,189,248,.14),transparent 70%),radial-gradient(ellipse 60% 40% at 50% 115%,rgba(52,211,153,.07),transparent 70%)}
+main{width:min(25rem,calc(100vw - 2.5rem));padding:2.75rem 2.25rem 2rem;text-align:center;border-radius:20px;border:1px solid rgba(255,255,255,.09);background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.015));box-shadow:0 24px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);animation:rise .6s cubic-bezier(.22,1,.36,1) both}
+.check{width:76px;height:76px;margin-bottom:1.5rem;filter:drop-shadow(0 0 18px rgba(52,211,153,.35))}
+.check circle,.check path{fill:none;stroke:#34d399;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.check circle{stroke-dasharray:151;animation:draw .7s cubic-bezier(.65,0,.45,1) .1s both}
+.check path{stroke-dasharray:36;animation:draw .35s cubic-bezier(.65,0,.45,1) .75s both}
+h1{margin:0 0 .6rem;font-size:1.45rem;font-weight:650;letter-spacing:-.01em}
+p{margin:.4rem 0;color:#8b93a3}
+.lead{color:#c8cdd8}
+kbd{font:.85em ui-monospace,SFMono-Regular,Menlo,monospace;color:#c8cdd8;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-bottom-width:2px;border-radius:6px;padding:.1em .45em}
+hr{border:0;height:1px;margin:1.4rem 0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent)}
+.manage{font-size:.92rem}
+a{color:#7dd3fc;text-decoration:none}
+a:hover{text-decoration:underline}
+.cta{display:inline-flex;align-items:center;gap:.6rem;margin-top:1.1rem;padding:.6rem 1.15rem;border-radius:999px;font-weight:550;color:#08090b;background:linear-gradient(180deg,#5eead4,#34d399);box-shadow:0 6px 20px rgba(52,211,153,.28),inset 0 1px 0 rgba(255,255,255,.4);transition:transform .15s ease,box-shadow .15s ease}
+.cta:hover{text-decoration:none;transform:translateY(-1px);box-shadow:0 10px 26px rgba(52,211,153,.36),inset 0 1px 0 rgba(255,255,255,.4)}
+.countdown{display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:1rem;font-size:.85rem;color:#6d7585}
+.ring{width:18px;height:18px;transform:rotate(-90deg)}
+.ring .track{fill:none;stroke:rgba(255,255,255,.12);stroke-width:2.5}
+.ring .bar{fill:none;stroke:#7dd3fc;stroke-width:2.5;stroke-linecap:round;stroke-dasharray:50.27;animation:drain {{SECONDS}}s linear both}
+#count{color:#c8cdd8;font-variant-numeric:tabular-nums}
+.sig{margin-top:1.6rem;font:.8rem ui-monospace,SFMono-Regular,Menlo,monospace;color:#525a68;letter-spacing:.02em}
+@keyframes rise{from{opacity:0;transform:translateY(14px) scale(.985)}}
+@keyframes draw{from{stroke-dashoffset:151}to{stroke-dashoffset:0}}
+@keyframes drain{from{stroke-dashoffset:0}to{stroke-dashoffset:50.27}}
+@media (prefers-reduced-motion:reduce){main,.check circle,.check path,.ring .bar{animation:none}}
+</style></head>
+<body data-redirect="{{URL}}">
+<main>
+<svg class="check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15.5 27.2l7.3 7.3L36.5 20"/></svg>
+<h1>You’re signed in</h1>
+<p class="lead">You can switch back to your terminal now — SetFree will pick up from there.</p>
+<hr>
+<p class="manage">Manage your plan and credits anytime at<br><a href="{{URL}}">{{HOST}}</a></p>
+<a class="cta" href="{{URL}}">Open the console →</a>
+<div class="countdown"><svg class="ring" viewBox="0 0 20 20" aria-hidden="true"><circle class="track" cx="10" cy="10" r="8"/><circle class="bar" cx="10" cy="10" r="8"/></svg><span>Redirecting in <span id="count">{{SECONDS}}</span>s</span></div>
+<p class="sig">[•‿•]&ensp;SetFree</p>
+</main>
+<script>
+(function () {
+  var n = {{SECONDS}}, el = document.getElementById('count');
+  var to = document.body.getAttribute('data-redirect');
+  var t = setInterval(function () {
+    n--;
+    if (el) el.textContent = n;
+    if (n <= 0) { clearInterval(t); location.replace(to); }
+  }, 1000);
+})();
+</script>
+</body></html>`
+
 // writeSuccessPage renders the page shown right after sign-in completes.
 // With no redirect configured it's the plain "you can close this tab"
 // message; with one, it makes clear the user can already go back to their
 // terminal, and navigates the browser to redirect after a visible
-// countdown — for MindsHub, its console, so credits/plan management is a
-// click away instead of leaving the user on a bare confirmation page.
+// countdown — for MindsHub, its console's billing page, so credits/plan
+// management is a click away instead of leaving the user on a bare
+// confirmation page.
 func writeSuccessPage(w http.ResponseWriter, redirect string) {
 	if redirect == "" {
 		writeBrowserPage(w, "You're signed in", "You can close this tab and return to your terminal.")
@@ -325,33 +392,11 @@ func writeSuccessPage(w http.ResponseWriter, redirect string) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>You're signed in</title>
-<meta http-equiv="refresh" content="%d;url=%s">
-<style>
-body{font:16px system-ui,-apple-system,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#0f0f10;color:#eee}
-div{text-align:center;max-width:26rem;padding:0 1.5rem}
-h1{font-size:1.3rem;margin:0 0 .75rem}
-p{color:#999;line-height:1.5;margin:.5rem 0}
-p.hl{color:#eee}
-a{color:#7dd3fc}
-#count{color:#eee;font-variant-numeric:tabular-nums}
-</style>
-<div>
-<h1>✓ You're signed in</h1>
-<p class="hl">You can switch back to your terminal now — SetFree will pick up from there.</p>
-<p>Manage your plan and credits anytime at <a href=%q>%s</a>.</p>
-<p>Taking you there in <span id="count">%d</span>s&hellip;</p>
-</div>
-<script>
-(function () {
-  var n = %d, el = document.getElementById('count');
-  var t = setInterval(function () {
-    n--;
-    if (el) el.textContent = n;
-    if (n <= 0) { clearInterval(t); location.replace(%q); }
-  }, 1000);
-})();
-</script>`, successRedirectDelaySeconds, redirect, redirect, host, successRedirectDelaySeconds, successRedirectDelaySeconds, redirect)
+	io.WriteString(w, strings.NewReplacer(
+		"{{URL}}", html.EscapeString(redirect),
+		"{{HOST}}", html.EscapeString(host),
+		"{{SECONDS}}", strconv.Itoa(successRedirectDelaySeconds),
+	).Replace(successPageTemplate))
 }
 
 // DefaultTimeout bounds a whole sign-in, including time spent waiting on
