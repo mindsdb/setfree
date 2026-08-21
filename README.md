@@ -41,6 +41,7 @@ SetFree also keeps itself current on its own. Once a day it checks whether main 
 ```sh
 setfree claude
 setfree codex .
+setfree code .
 ```
 
 Everything after the CLI name goes straight through, untouched:
@@ -71,7 +72,9 @@ Setup only happens on a real terminal. In scripts or CI, set `SETFREE_BASE_URL` 
 
 ## Coding CLIs
 
-Claude Code and Codex work today. Gemini CLI and Aider get detected if they're installed and show up on the landing screen, but they politely decline to launch until someone builds an adapter for them. No pretending.
+Claude Code and Codex work today. So does VS Code: `setfree code` (or `setfree vscode`) launches the editor with the gateway environment in place, so the Claude Code extension inside it routes through your gateway — the extension spawns the same `claude` binary, which reads its configuration from the environment VS Code hands it. One catch, which SetFree tells you about at launch: that environment only applies to a freshly started VS Code, so quit any running instance first.
+
+Gemini CLI and Aider get detected if they're installed and show up on the landing screen, but they politely decline to launch until someone builds an adapter for them. No pretending.
 
 ## Gateway configuration
 
