@@ -42,6 +42,11 @@ func TestBuildGroup_FiltersAndShapes(t *testing.T) {
 		if m.ContextWindow == 0 || m.MaxOutputTokens == 0 {
 			t.Errorf("%s: token budgets must be set — VS Code plans against them", m.ID)
 		}
+		// Without the explicit header, current VS Code builds send no
+		// Authorization at all and every request 401s at the gateway.
+		if m.RequestHeaders["Authorization"] != "Bearer ${apiKey}" {
+			t.Errorf("%s: requestHeaders = %v, want an explicit bearer with the ${apiKey} token", m.ID, m.RequestHeaders)
+		}
 	}
 	if g.Models[0].Name != "MindsHub Air" {
 		t.Errorf("label should become the display name, got %q", g.Models[0].Name)
@@ -133,8 +138,8 @@ func TestUpsertChatModels_PreservesOtherProvidersAndReplacesOwn(t *testing.T) {
 func TestEnsureDefaultChatModel_SetsWhenAbsentRespectsWhenPresent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 
-	if err := ensureDefaultChatModel(path, "mindshub_air"); err != nil {
-		t.Fatalf("ensureDefaultChatModel: %v", err)
+	if err := ensureChatSettings(path, chatSettings("mindshub_air")); err != nil {
+		t.Fatalf("ensureChatSettings: %v", err)
 	}
 	data, _ := os.ReadFile(path)
 	var settings map[string]string
@@ -144,11 +149,14 @@ func TestEnsureDefaultChatModel_SetsWhenAbsentRespectsWhenPresent(t *testing.T) 
 	if settings["chat.defaultModel"] != "mindshub_air" {
 		t.Errorf("chat.defaultModel = %q", settings["chat.defaultModel"])
 	}
+	if settings["chat.byokUtilityModelDefault"] != "mainAgent" {
+		t.Errorf("chat.byokUtilityModelDefault = %q, want mainAgent so signed-out utility tasks use the main model", settings["chat.byokUtilityModelDefault"])
+	}
 
 	// A default the user picked themselves must survive.
 	os.WriteFile(path, []byte(`{"chat.defaultModel": "sonnet", "editor.fontSize": 14}`), 0o644)
-	if err := ensureDefaultChatModel(path, "mindshub_air"); err != nil {
-		t.Fatalf("ensureDefaultChatModel: %v", err)
+	if err := ensureChatSettings(path, chatSettings("mindshub_air")); err != nil {
+		t.Fatalf("ensureChatSettings: %v", err)
 	}
 	data, _ = os.ReadFile(path)
 	if !strings.Contains(string(data), `"sonnet"`) {
@@ -166,7 +174,7 @@ func TestEnsureDefaultChatModel_RefusesJSONC(t *testing.T) {
 	jsonc := "{\n  // the user's carefully annotated settings\n  \"editor.fontSize\": 14\n}"
 	os.WriteFile(path, []byte(jsonc), 0o644)
 
-	if err := ensureDefaultChatModel(path, "mindshub_air"); err == nil {
+	if err := ensureChatSettings(path, chatSettings("mindshub_air")); err == nil {
 		t.Fatal("expected a JSONC settings file to be refused, not rewritten")
 	}
 	data, _ := os.ReadFile(path)

@@ -43,6 +43,13 @@ type chatModelSpec struct {
 	ContextWindow   int            `json:"contextWindow"`
 	MaxOutputTokens int            `json:"maxOutputTokens"`
 	ModelOptions    map[string]any `json:"modelOptions,omitempty"`
+	// RequestHeaders forces the auth header explicitly. Left implicit,
+	// current VS Code builds (observed on 1.134) send custom-endpoint
+	// requests with no Authorization header at all — the provider-level
+	// apiKey is simply never applied — so every request dies at the
+	// gateway's front door with an HTML 401. ${apiKey} is VS Code's own
+	// substitution token for the provider key.
+	RequestHeaders map[string]string `json:"requestHeaders"`
 }
 
 const (
@@ -77,6 +84,7 @@ func buildGroup(baseURL, apiKey string, models []catalog.Model) chatModelGroup {
 			ToolCalling:     true, // gates agent mode; catalog chat models take tools
 			ContextWindow:   defaultContextWindow,
 			MaxOutputTokens: defaultMaxOutputTokens,
+			RequestHeaders:  map[string]string{"Authorization": "Bearer ${apiKey}"},
 		}
 		// Kimi rejects VS Code's default temperature (0.1) with a 400;
 		// pinning 1 is the documented fix. Other catalog models accept
@@ -168,18 +176,35 @@ func settingsPath() (string, error) {
 	return filepath.Join(filepath.Dir(chatPath), "settings.json"), nil
 }
 
-// ensureDefaultChatModel sets "chat.defaultModel" so new chats start on a
-// gateway model instead of a built-in Copilot one — which, signed out,
-// fails every request with GitHub's 401 even though the gateway models
-// work fine. It only ever fills the key in when absent: a default the
-// user picked themselves stays theirs, rather than being re-pinned on
-// every launch.
+// chatSettings returns the settings.json entries a gateway-backed chat
+// needs, keyed by setting name:
+//
+//   - chat.defaultModel: new chats start on the pinned gateway model
+//     instead of a built-in Copilot one — which, signed out, fails every
+//     request with GitHub's 401 even though the gateway models work fine.
+//   - chat.byokUtilityModelDefault "mainAgent": VS Code's internal utility
+//     tasks (chat titles, inline-chat progress) otherwise demand a Copilot
+//     utility model that doesn't exist signed-out, and error with exactly
+//     this setting as the printed remedy.
+func chatSettings(defaultModel string) map[string]any {
+	settings := map[string]any{
+		"chat.byokUtilityModelDefault": "mainAgent",
+	}
+	if defaultModel != "" {
+		settings["chat.defaultModel"] = defaultModel
+	}
+	return settings
+}
+
+// ensureChatSettings fills wanted into settings.json, key by key, only
+// where absent: a value the user set themselves always wins over SetFree's
+// idea of a good default, rather than being re-pinned on every launch.
 //
 // settings.json is user-owned and allows comments (JSONC), which
 // encoding/json can't round-trip. A file that doesn't parse as strict
 // JSON is therefore left untouched — losing someone's commented settings
-// to set one default would be a terrible trade.
-func ensureDefaultChatModel(path, modelID string) error {
+// to set a default would be a terrible trade.
+func ensureChatSettings(path string, wanted map[string]any) error {
 	settings := map[string]json.RawMessage{}
 	data, err := os.ReadFile(path)
 	switch {
@@ -189,19 +214,25 @@ func ensureDefaultChatModel(path, modelID string) error {
 		return err
 	default:
 		if err := json.Unmarshal(data, &settings); err != nil {
-			return fmt.Errorf("%s isn't strict JSON (comments?), so SetFree won't edit it — set %q yourself: %w", path, "chat.defaultModel", err)
+			return fmt.Errorf("%s isn't strict JSON (comments?), so SetFree won't edit it — set %v yourself: %w", path, keysOf(wanted), err)
 		}
 	}
 
-	if _, exists := settings["chat.defaultModel"]; exists {
-		return nil // the user's choice wins
+	changed := false
+	for key, value := range wanted {
+		if _, exists := settings[key]; exists {
+			continue // the user's choice wins
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		settings[key] = encoded
+		changed = true
 	}
-
-	encoded, err := json.Marshal(modelID)
-	if err != nil {
-		return err
+	if !changed {
+		return nil
 	}
-	settings["chat.defaultModel"] = encoded
 
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -211,4 +242,12 @@ func ensureDefaultChatModel(path, modelID string) error {
 		return err
 	}
 	return os.WriteFile(path, append(out, '\n'), 0o644)
+}
+
+func keysOf(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
