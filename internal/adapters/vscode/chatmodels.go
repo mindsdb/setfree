@@ -43,12 +43,14 @@ type chatModelSpec struct {
 	ContextWindow   int            `json:"contextWindow"`
 	MaxOutputTokens int            `json:"maxOutputTokens"`
 	ModelOptions    map[string]any `json:"modelOptions,omitempty"`
-	// RequestHeaders forces the auth header explicitly. Left implicit,
-	// current VS Code builds (observed on 1.134) send custom-endpoint
-	// requests with no Authorization header at all — the provider-level
-	// apiKey is simply never applied — so every request dies at the
-	// gateway's front door with an HTML 401. ${apiKey} is VS Code's own
-	// substitution token for the provider key.
+	// RequestHeaders forces the auth header explicitly, with the literal
+	// key in it. On current VS Code builds (captured on 1.134 / Copilot
+	// Chat 0.62.0) the provider-level apiKey resolves to an empty bearer —
+	// both implicitly and through VS Code's own ${apiKey} substitution
+	// token — so every request died at the gateway with an HTML 401. A
+	// raw "Bearer <key>" passes through verbatim. No new exposure: the
+	// same file already holds the key in the apiKey field, which is kept
+	// for extension versions where the documented path works.
 	RequestHeaders map[string]string `json:"requestHeaders"`
 }
 
@@ -84,7 +86,7 @@ func buildGroup(baseURL, apiKey string, models []catalog.Model) chatModelGroup {
 			ToolCalling:     true, // gates agent mode; catalog chat models take tools
 			ContextWindow:   defaultContextWindow,
 			MaxOutputTokens: defaultMaxOutputTokens,
-			RequestHeaders:  map[string]string{"Authorization": "Bearer ${apiKey}"},
+			RequestHeaders:  map[string]string{"Authorization": "Bearer " + apiKey},
 		}
 		// Kimi rejects VS Code's default temperature (0.1) with a 400;
 		// pinning 1 is the documented fix. Other catalog models accept

@@ -42,10 +42,11 @@ func TestBuildGroup_FiltersAndShapes(t *testing.T) {
 		if m.ContextWindow == 0 || m.MaxOutputTokens == 0 {
 			t.Errorf("%s: token budgets must be set — VS Code plans against them", m.ID)
 		}
-		// Without the explicit header, current VS Code builds send no
-		// Authorization at all and every request 401s at the gateway.
-		if m.RequestHeaders["Authorization"] != "Bearer ${apiKey}" {
-			t.Errorf("%s: requestHeaders = %v, want an explicit bearer with the ${apiKey} token", m.ID, m.RequestHeaders)
+		// Without the explicit literal bearer, current VS Code builds send
+		// an empty Authorization (the provider apiKey and its ${apiKey}
+		// token both resolve empty) and every request 401s at the gateway.
+		if m.RequestHeaders["Authorization"] != "Bearer mdb_key" {
+			t.Errorf("%s: requestHeaders = %v, want the literal bearer", m.ID, m.RequestHeaders)
 		}
 	}
 	if g.Models[0].Name != "MindsHub Air" {
