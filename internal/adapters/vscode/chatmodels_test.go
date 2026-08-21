@@ -57,15 +57,15 @@ func TestBuildGroup_FiltersAndShapes(t *testing.T) {
 	}
 }
 
-// Kimi rejects VS Code's default temperature with a 400; the entry has to
-// carry the documented override. Other models must not get one.
-func TestBuildGroup_KimiTemperature(t *testing.T) {
-	g := buildGroup("https://api.example.com", "k", []catalog.Model{{ID: "kimi"}, {ID: "sonnet"}})
-	if g.Models[0].ModelOptions["temperature"] != 1 {
-		t.Errorf("kimi modelOptions = %v, want temperature 1", g.Models[0].ModelOptions)
-	}
-	if g.Models[1].ModelOptions != nil {
-		t.Errorf("sonnet should carry no modelOptions, got %v", g.Models[1].ModelOptions)
+// VS Code's default temperature (0.1) 400s on parts of the catalog (Kimi,
+// and reasoning-model aliases), while every model accepts exactly 1 — so
+// it's pinned on every entry, not special-cased per model.
+func TestBuildGroup_TemperaturePinnedOnEveryModel(t *testing.T) {
+	g := buildGroup("https://api.example.com", "k", []catalog.Model{{ID: "kimi"}, {ID: "sonnet"}, {ID: "mindshub_air"}})
+	for _, m := range g.Models {
+		if m.ModelOptions["temperature"] != 1 {
+			t.Errorf("%s: modelOptions = %v, want temperature 1", m.ID, m.ModelOptions)
+		}
 	}
 }
 

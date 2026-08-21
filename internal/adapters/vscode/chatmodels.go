@@ -87,12 +87,13 @@ func buildGroup(baseURL, apiKey string, models []catalog.Model) chatModelGroup {
 			ContextWindow:   defaultContextWindow,
 			MaxOutputTokens: defaultMaxOutputTokens,
 			RequestHeaders:  map[string]string{"Authorization": "Bearer " + apiKey},
-		}
-		// Kimi rejects VS Code's default temperature (0.1) with a 400;
-		// pinning 1 is the documented fix. Other catalog models accept
-		// the default.
-		if m.ID == "kimi" {
-			spec.ModelOptions = map[string]any{"temperature": 1}
+			// VS Code sends temperature 0.1 unless overridden, and parts
+			// of the catalog 400 on it: Kimi rejects 0.1 outright, and
+			// reasoning-model aliases (mindshub_air, gpt) reject any
+			// temperature except 1. Every catalog model accepts exactly 1,
+			// so it's pinned uniformly rather than special-casing models
+			// whose upstreams can change under the alias.
+			ModelOptions: map[string]any{"temperature": 1},
 		}
 		group.Models = append(group.Models, spec)
 	}
