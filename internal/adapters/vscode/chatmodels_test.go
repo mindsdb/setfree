@@ -130,6 +130,51 @@ func TestUpsertChatModels_PreservesOtherProvidersAndReplacesOwn(t *testing.T) {
 	}
 }
 
+func TestEnsureDefaultChatModel_SetsWhenAbsentRespectsWhenPresent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+
+	if err := ensureDefaultChatModel(path, "mindshub_air"); err != nil {
+		t.Fatalf("ensureDefaultChatModel: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	var settings map[string]string
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("settings.json isn't valid JSON: %v", err)
+	}
+	if settings["chat.defaultModel"] != "mindshub_air" {
+		t.Errorf("chat.defaultModel = %q", settings["chat.defaultModel"])
+	}
+
+	// A default the user picked themselves must survive.
+	os.WriteFile(path, []byte(`{"chat.defaultModel": "sonnet", "editor.fontSize": 14}`), 0o644)
+	if err := ensureDefaultChatModel(path, "mindshub_air"); err != nil {
+		t.Fatalf("ensureDefaultChatModel: %v", err)
+	}
+	data, _ = os.ReadFile(path)
+	if !strings.Contains(string(data), `"sonnet"`) {
+		t.Errorf("the user's own default was overridden:\n%s", data)
+	}
+	if !strings.Contains(string(data), "editor.fontSize") {
+		t.Errorf("unrelated settings were lost:\n%s", data)
+	}
+}
+
+// settings.json legally contains comments (JSONC); rewriting it through
+// encoding/json would silently strip them.
+func TestEnsureDefaultChatModel_RefusesJSONC(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	jsonc := "{\n  // the user's carefully annotated settings\n  \"editor.fontSize\": 14\n}"
+	os.WriteFile(path, []byte(jsonc), 0o644)
+
+	if err := ensureDefaultChatModel(path, "mindshub_air"); err == nil {
+		t.Fatal("expected a JSONC settings file to be refused, not rewritten")
+	}
+	data, _ := os.ReadFile(path)
+	if string(data) != jsonc {
+		t.Error("the JSONC file was modified despite the refusal")
+	}
+}
+
 // A file that exists but doesn't parse may be a hand-edit in progress;
 // clobbering it would destroy the user's work.
 func TestUpsertChatModels_RefusesToOverwriteCorruptFile(t *testing.T) {

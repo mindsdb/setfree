@@ -157,3 +157,58 @@ func upsertChatModels(path string, group chatModelGroup) error {
 	// the format, but nothing says other users on the machine get to read it.
 	return os.WriteFile(path, append(out, '\n'), 0o600)
 }
+
+// settingsPath returns VS Code's settings.json, which lives beside
+// chatLanguageModels.json.
+func settingsPath() (string, error) {
+	chatPath, err := chatModelsPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(chatPath), "settings.json"), nil
+}
+
+// ensureDefaultChatModel sets "chat.defaultModel" so new chats start on a
+// gateway model instead of a built-in Copilot one — which, signed out,
+// fails every request with GitHub's 401 even though the gateway models
+// work fine. It only ever fills the key in when absent: a default the
+// user picked themselves stays theirs, rather than being re-pinned on
+// every launch.
+//
+// settings.json is user-owned and allows comments (JSONC), which
+// encoding/json can't round-trip. A file that doesn't parse as strict
+// JSON is therefore left untouched — losing someone's commented settings
+// to set one default would be a terrible trade.
+func ensureDefaultChatModel(path, modelID string) error {
+	settings := map[string]json.RawMessage{}
+	data, err := os.ReadFile(path)
+	switch {
+	case os.IsNotExist(err):
+		// First write: start empty.
+	case err != nil:
+		return err
+	default:
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return fmt.Errorf("%s isn't strict JSON (comments?), so SetFree won't edit it — set %q yourself: %w", path, "chat.defaultModel", err)
+		}
+	}
+
+	if _, exists := settings["chat.defaultModel"]; exists {
+		return nil // the user's choice wins
+	}
+
+	encoded, err := json.Marshal(modelID)
+	if err != nil {
+		return err
+	}
+	settings["chat.defaultModel"] = encoded
+
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(out, '\n'), 0o644)
+}

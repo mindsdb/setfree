@@ -81,5 +81,19 @@ func (adapter) Prepare(ctx context.Context, resolved gateway.Resolved) (string, 
 	if err := upsertChatModels(path, group); err != nil {
 		return "", err
 	}
+
+	// Point new chats at a gateway model when a pinned one exists and the
+	// user hasn't chosen their own default. Without this, chat opens on a
+	// built-in Copilot model, which fails signed-out — a confusing 401
+	// that looks like the gateway rejecting the key when it never saw the
+	// request at all. Best-effort: an uneditable settings.json shouldn't
+	// fail the launch over a default.
+	if resolved.Model != "" {
+		if sp, spErr := settingsPath(); spErr == nil {
+			if err := ensureDefaultChatModel(sp, resolved.Model); err != nil {
+				return fmt.Sprintf("✓ %d gateway models configured in VS Code's chat model picker (%v)", len(group.Models), err), nil
+			}
+		}
+	}
 	return fmt.Sprintf("✓ %d gateway models configured in VS Code's chat model picker", len(group.Models)), nil
 }
