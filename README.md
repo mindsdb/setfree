@@ -9,7 +9,7 @@
 setfree claude
 ```
 
-That's `claude`. The actual binary. Running with whatever endpoint, key, and model you configured instead of the one it shipped with.
+And you get your usual `claude`. but with whatever model you want.
 
 SetFree doesn't touch your terminal, your keybindings, or your Claude config. It just hands the real CLI the environment it needs and gets out of the way.
 
