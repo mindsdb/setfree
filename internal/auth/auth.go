@@ -302,23 +302,56 @@ div{text-align:center}p{color:#999}</style>
 <div><h1>%s</h1><p>%s</p></div>`, title, title, detail)
 }
 
+// successRedirectDelaySeconds is how long the success page waits before
+// navigating the browser to SuccessRedirect. Long enough that the "switch
+// back to your terminal" message actually gets read before the tab moves
+// out from under the user.
+const successRedirectDelaySeconds = 10
+
 // writeSuccessPage renders the page shown right after sign-in completes.
 // With no redirect configured it's the plain "you can close this tab"
-// message; with one, it also navigates the browser there after a brief
-// pause, so a provider with its own web console (MindsHub's, say) lands
-// the user there instead of leaving them on a bare confirmation page.
+// message; with one, it makes clear the user can already go back to their
+// terminal, and navigates the browser to redirect after a visible
+// countdown — for MindsHub, its console, so credits/plan management is a
+// click away instead of leaving the user on a bare confirmation page.
 func writeSuccessPage(w http.ResponseWriter, redirect string) {
 	if redirect == "" {
 		writeBrowserPage(w, "You're signed in", "You can close this tab and return to your terminal.")
 		return
 	}
+	host := redirect
+	if u, err := url.Parse(redirect); err == nil && u.Host != "" {
+		host = u.Host
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>You're signed in</title>
-<meta http-equiv="refresh" content="1;url=%s">
-<style>body{font:16px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#0f0f10;color:#eee}
-div{text-align:center}p{color:#999}</style>
-<div><h1>You're signed in</h1><p>Taking you to the console&hellip;</p></div>
-<script>setTimeout(function(){location.replace(%q)},900)</script>`, redirect, redirect)
+<meta http-equiv="refresh" content="%d;url=%s">
+<style>
+body{font:16px system-ui,-apple-system,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#0f0f10;color:#eee}
+div{text-align:center;max-width:26rem;padding:0 1.5rem}
+h1{font-size:1.3rem;margin:0 0 .75rem}
+p{color:#999;line-height:1.5;margin:.5rem 0}
+p.hl{color:#eee}
+a{color:#7dd3fc}
+#count{color:#eee;font-variant-numeric:tabular-nums}
+</style>
+<div>
+<h1>✓ You're signed in</h1>
+<p class="hl">You can switch back to your terminal now — SetFree will pick up from there.</p>
+<p>Manage your plan and credits anytime at <a href=%q>%s</a>.</p>
+<p>Taking you there in <span id="count">%d</span>s&hellip;</p>
+</div>
+<script>
+(function () {
+  var n = %d, el = document.getElementById('count');
+  var t = setInterval(function () {
+    n--;
+    if (el) el.textContent = n;
+    if (n <= 0) { clearInterval(t); location.replace(%q); }
+  }, 1000);
+})();
+</script>`, successRedirectDelaySeconds, redirect, redirect, host, successRedirectDelaySeconds, successRedirectDelaySeconds, redirect)
 }
 
 // DefaultTimeout bounds a whole sign-in, including time spent waiting on

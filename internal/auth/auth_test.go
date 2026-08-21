@@ -155,14 +155,30 @@ func fetchCallbackPage(t *testing.T, idp *fakeIDP, cfg Config) string {
 
 // A configured SuccessRedirect must actually reach the browser page, since
 // that's what sends the user on to a provider's console after signing in.
+// It also has to wait long enough for the "switch back to your terminal"
+// message to actually be read, show a live countdown rather than an
+// instant jump, and name the redirect's own host -- not a hardcoded one
+// that would be wrong for a non-production deployment.
 func TestLogin_CallbackPageRedirectsWhenConfigured(t *testing.T) {
 	idp := newFakeIDP(t, "token")
 	cfg := idp.config()
-	cfg.SuccessRedirect = "https://console.example.com"
+	cfg.SuccessRedirect = "https://console.staging.example.com/settings/organization/billing"
 
 	body := fetchCallbackPage(t, idp, cfg)
-	if !strings.Contains(body, "https://console.example.com") {
+	if !strings.Contains(body, cfg.SuccessRedirect) {
 		t.Errorf("callback page didn't mention the redirect target:\n%s", body)
+	}
+	if !strings.Contains(body, `content="10;url=`) {
+		t.Errorf("expected a 10-second meta-refresh fallback:\n%s", body)
+	}
+	if !strings.Contains(body, `id="count">10<`) {
+		t.Errorf("expected a visible 10-second countdown:\n%s", body)
+	}
+	if !strings.Contains(body, "console.staging.example.com") {
+		t.Errorf("expected the link text to name the redirect's actual host, not a hardcoded one:\n%s", body)
+	}
+	if !strings.Contains(body, "switch back to your terminal") {
+		t.Errorf("expected the page to make clear the user can return to their terminal:\n%s", body)
 	}
 }
 

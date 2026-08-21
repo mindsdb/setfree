@@ -66,7 +66,7 @@ func MindsHubOIDC() auth.Config {
 		Realm:           "mindsdb",
 		ClientID:        "anton-desktop",
 		Scopes:          []string{"openid", "profile", "email"},
-		SuccessRedirect: MindsHubConsoleURL(),
+		SuccessRedirect: MindsHubBillingURL(),
 	}
 }
 
@@ -76,11 +76,17 @@ func MindsHubAuthAPI() string {
 	return fmt.Sprintf("https://auth.%s/v1", mindsHubDomain())
 }
 
-// MindsHubConsoleURL returns the web console's address, so the browser can
-// be sent there once sign-in completes rather than left on a bare
-// confirmation page.
+// MindsHubConsoleURL returns the web console's address.
 func MindsHubConsoleURL() string {
 	return fmt.Sprintf("https://console.%s", mindsHubDomain())
+}
+
+// MindsHubBillingURL returns the console's organization billing page, so
+// the browser can be sent there once sign-in completes — putting credit
+// and plan management one click away — rather than left on a bare
+// confirmation page.
+func MindsHubBillingURL() string {
+	return MindsHubConsoleURL() + "/settings/organization/billing"
 }
 
 // Providers are the gateway presets offered at setup, in display order.

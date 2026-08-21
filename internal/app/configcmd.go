@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mindsdb/setfree/internal/config"
+	"github.com/mindsdb/setfree/internal/detect"
 	"github.com/mindsdb/setfree/internal/gateway"
 	"github.com/mindsdb/setfree/internal/secrets"
 	"github.com/mindsdb/setfree/internal/terminal"
@@ -217,9 +218,23 @@ func cmdConfigMenu() int {
 		if err := applyProviderDefaultModel(e, provider); err != nil {
 			return fail(err)
 		}
-		fmt.Printf("%s Gateway updated\n", e.colors.Green(terminal.Check))
 		fmt.Println()
+		ui.ConnectionSuccess(os.Stdout, e.colors, provider.DisplayName, installedLaunchableCLIs())
+		return 0
 	}
+}
+
+// installedLaunchableCLIs lists the keys of coding CLIs SetFree found on
+// PATH and can actually launch (has an adapter for), in detect.List's
+// order — the CLIs worth telling the user to try right after connecting.
+func installedLaunchableCLIs() []string {
+	var keys []string
+	for _, k := range detect.List {
+		if k.Supported && k.Installed() {
+			keys = append(keys, k.Key)
+		}
+	}
+	return keys
 }
 
 func isYes(s string) bool {

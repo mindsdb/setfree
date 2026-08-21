@@ -90,11 +90,23 @@ func TestMindsHubConsoleURL_FollowsDomainOverride(t *testing.T) {
 	}
 }
 
-// The OIDC config is what carries the redirect into the sign-in flow, so
-// it has to actually point at the console, not be left empty.
-func TestMindsHubOIDC_RedirectsToConsole(t *testing.T) {
+func TestMindsHubBillingURL_FollowsDomainOverride(t *testing.T) {
+	t.Setenv(EnvMindsHubDomain, "staging.mindshub.ai")
+	if got := MindsHubBillingURL(); got != "https://console.staging.mindshub.ai/settings/organization/billing" {
+		t.Errorf("billing URL = %q", got)
+	}
+
 	t.Setenv(EnvMindsHubDomain, "")
-	if got := MindsHubOIDC().SuccessRedirect; got != "https://console.mindshub.ai" {
+	if got := MindsHubBillingURL(); got != "https://console.mindshub.ai/settings/organization/billing" {
+		t.Errorf("billing URL = %q", got)
+	}
+}
+
+// The OIDC config is what carries the redirect into the sign-in flow, so
+// it has to actually point at the billing page, not be left empty.
+func TestMindsHubOIDC_RedirectsToBilling(t *testing.T) {
+	t.Setenv(EnvMindsHubDomain, "")
+	if got := MindsHubOIDC().SuccessRedirect; got != "https://console.mindshub.ai/settings/organization/billing" {
 		t.Errorf("SuccessRedirect = %q", got)
 	}
 }
