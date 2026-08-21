@@ -18,6 +18,7 @@ package codex
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/mindsdb/setfree/internal/adapters"
 	"github.com/mindsdb/setfree/internal/envutil"
@@ -48,13 +49,22 @@ func (adapter) BinaryNames() []string { return []string{"codex"} }
 func (adapter) Build(baseEnv []string, resolved gateway.Resolved) (adapters.Build, error) {
 	env := envutil.Set(baseEnv, envAPIKeyVar, resolved.Gateway.APIKey)
 
+	// Codex appends "/responses" to base_url itself, so the URL must end
+	// in the API version segment ("/v1") — the opposite of Claude Code,
+	// which wants the bare host. Gateways get saved as bare hosts, so add
+	// the segment here rather than hitting <host>/responses and 404ing.
+	baseURL := strings.TrimRight(resolved.Gateway.BaseURL, "/")
+	if !strings.HasSuffix(strings.ToLower(baseURL), "/v1") {
+		baseURL += "/v1"
+	}
+
 	set := func(key, value string) string {
 		return fmt.Sprintf("%s=%q", key, value)
 	}
 	args := []string{
 		"-c", set("model_provider", providerID),
 		"-c", set(fmt.Sprintf("model_providers.%s.name", providerID), providerName),
-		"-c", set(fmt.Sprintf("model_providers.%s.base_url", providerID), resolved.Gateway.BaseURL),
+		"-c", set(fmt.Sprintf("model_providers.%s.base_url", providerID), baseURL),
 		"-c", set(fmt.Sprintf("model_providers.%s.wire_api", providerID), "responses"),
 		"-c", set(fmt.Sprintf("model_providers.%s.env_key", providerID), envAPIKeyVar),
 	}

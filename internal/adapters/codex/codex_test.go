@@ -60,8 +60,11 @@ func TestBuild_UsesResponsesWireAPIAndEnvKeyIndirection(t *testing.T) {
 	if v, _ := argValue(t, build.Args, "model_providers.setfree.wire_api"); v != `"responses"` {
 		t.Errorf("wire_api = %s, want a quoted TOML string \"responses\"", v)
 	}
-	if v, _ := argValue(t, build.Args, "model_providers.setfree.base_url"); v != `"https://gw.example.com"` {
-		t.Errorf("base_url = %s", v)
+	// Codex appends "/responses" to base_url itself, so the URL SetFree
+	// hands it must end in /v1 even though gateways are saved as bare
+	// hosts — otherwise every request hits <host>/responses and 404s.
+	if v, _ := argValue(t, build.Args, "model_providers.setfree.base_url"); v != `"https://gw.example.com/v1"` {
+		t.Errorf("base_url = %s, want the /v1 segment appended", v)
 	}
 
 	// The raw API key must never appear on argv.
@@ -82,6 +85,18 @@ func TestBuild_UsesResponsesWireAPIAndEnvKeyIndirection(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("env_key %q not set to the API key in build.Env: %v", envKeyVal, build.Env)
+	}
+}
+
+func TestBuild_DoesNotDoubleV1WhenBaseAlreadyEndsInIt(t *testing.T) {
+	build, err := adapter{}.Build(nil, gateway.Resolved{
+		Gateway: gateway.Gateway{BaseURL: "https://gw.example.com/v1/", APIKey: "sk-gateway"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if v, _ := argValue(t, build.Args, "model_providers.setfree.base_url"); v != `"https://gw.example.com/v1"` {
+		t.Errorf("base_url = %s, want /v1 exactly once with no trailing slash", v)
 	}
 }
 

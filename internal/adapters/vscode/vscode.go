@@ -17,9 +17,11 @@ package vscode
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mindsdb/setfree/internal/adapters"
 	"github.com/mindsdb/setfree/internal/adapters/claude"
+	"github.com/mindsdb/setfree/internal/catalog"
 	"github.com/mindsdb/setfree/internal/detect"
 	"github.com/mindsdb/setfree/internal/gateway"
 )
@@ -52,4 +54,32 @@ func (adapter) DiscoverModels(ctx context.Context, gw gateway.Gateway) adapters.
 	// spawns, so the probe must be Claude Code's, not something editor-
 	// flavored.
 	return claude.Discover(ctx, gw)
+}
+
+// Prepare configures VS Code's own chat to call the gateway directly —
+// no extension in the middle: it fetches the gateway's model catalog and
+// writes a Custom Endpoint provider entry into chatLanguageModels.json,
+// so every catalog model appears in the native chat model picker posting
+// straight to the gateway's chat-completions endpoint. Runs on every
+// launch so the picker tracks the catalog; the upsert only ever touches
+// SetFree's own entry.
+func (adapter) Prepare(ctx context.Context, resolved gateway.Resolved) (string, error) {
+	models, err := catalog.Fetch(ctx, resolved.Gateway.BaseURL, resolved.Gateway.APIKey)
+	if err != nil {
+		return "", fmt.Errorf("fetching the gateway's model catalog: %w", err)
+	}
+
+	group := buildGroup(resolved.Gateway.BaseURL, resolved.Gateway.APIKey, models)
+	if len(group.Models) == 0 {
+		return "", fmt.Errorf("the gateway listed no chat models")
+	}
+
+	path, err := chatModelsPath()
+	if err != nil {
+		return "", err
+	}
+	if err := upsertChatModels(path, group); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✓ %d gateway models configured in VS Code's chat model picker", len(group.Models)), nil
 }

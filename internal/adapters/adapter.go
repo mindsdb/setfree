@@ -47,6 +47,17 @@ type Adapter interface {
 	DiscoverModels(ctx context.Context, gw gateway.Gateway) Discovery
 }
 
+// Preparer is implemented by adapters whose target reads configuration
+// from disk rather than (or in addition to) the environment — VS Code's
+// chat model picker, say. Prepare runs on every launch, before Build, and
+// must be idempotent. It returns a one-line confirmation to show the user
+// (or "" for silence). A failure doesn't abort the launch: the caller
+// reports it and launches anyway, since a stale model list beats no
+// editor at all.
+type Preparer interface {
+	Prepare(ctx context.Context, resolved gateway.Resolved) (note string, err error)
+}
+
 // Discovery is what an adapter's model-listing probe found.
 type Discovery struct {
 	// Supported reports whether the endpoint answered with a usable list

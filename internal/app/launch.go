@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/mindsdb/setfree/internal/adapters"
 	"github.com/mindsdb/setfree/internal/config"
@@ -60,6 +62,21 @@ func cmdLaunch(name string, passthrough []string) int {
 			if err != nil {
 				return fail(err)
 			}
+		}
+	}
+
+	// Some targets read configuration from disk rather than the
+	// environment (VS Code's chat model picker). Give the adapter its
+	// chance to write that before launching; failure is reported but
+	// never blocks the launch itself.
+	if prep, ok := adapter.(adapters.Preparer); ok {
+		prepCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		note, prepErr := prep.Prepare(prepCtx, resolved)
+		cancel()
+		if prepErr != nil {
+			fmt.Println(ui.PrepareWarning(e.colors, prepErr))
+		} else if note != "" {
+			fmt.Println(note)
 		}
 	}
 

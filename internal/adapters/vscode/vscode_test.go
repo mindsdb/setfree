@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -100,6 +101,56 @@ func TestBuild_WarnsAboutAlreadyRunningVSCode(t *testing.T) {
 	}
 	if !strings.Contains(build.Note, "already running") {
 		t.Errorf("Note = %q, want it to warn about an already-running instance", build.Note)
+	}
+}
+
+// Prepare, end to end: catalog fetched from the gateway, provider entry
+// written where VS Code reads it. HOME is overridden so chatModelsPath
+// resolves into the test dir.
+func TestPrepare_WritesChatModelsFromGatewayCatalog(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"id":"mindshub_air","label":"MindsHub Air"},{"id":"kimi","label":"Kimi K3"}]}`))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	note, err := adapter{}.Prepare(context.Background(), gateway.Resolved{
+		Gateway: gateway.Gateway{BaseURL: srv.URL, APIKey: "mdb_k"},
+	})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if !strings.Contains(note, "2 gateway models") {
+		t.Errorf("note = %q", note)
+	}
+
+	path, err := chatModelsPath()
+	if err != nil {
+		t.Fatalf("chatModelsPath: %v", err)
+	}
+	if !strings.HasPrefix(path, home) {
+		t.Fatalf("path %q escaped the test HOME %q", path, home)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the config file wasn't written: %v", err)
+	}
+	for _, want := range []string{"mindshub_air", "Kimi K3", "customendpoint", srv.URL + "/v1/chat/completions"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("config missing %q:\n%s", want, data)
+		}
+	}
+}
+
+func TestPrepare_UnreachableGatewayIsAnErrorNotAPanic(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_, err := adapter{}.Prepare(context.Background(), gateway.Resolved{
+		Gateway: gateway.Gateway{BaseURL: "http://127.0.0.1:1", APIKey: "k"},
+	})
+	if err == nil {
+		t.Fatal("expected an unreachable gateway to be reported")
 	}
 }
 

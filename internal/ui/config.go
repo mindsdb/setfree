@@ -55,6 +55,12 @@ func MenuHeader(w io.Writer, c terminal.Colors, s Status) {
 // ConfirmReset renders the reset confirmation prompt.
 const ConfirmResetPrompt = "Reset SetFree configuration? This removes your saved gateway and API key. [y/N] "
 
+// PrepareWarning renders a non-fatal failure from an adapter's Prepare
+// step: launch continues, but whatever it was configuring didn't refresh.
+func PrepareWarning(c terminal.Colors, err error) string {
+	return c.Dim(fmt.Sprintf("Note: %v — launching anyway.", err))
+}
+
 // ConnectionSuccess renders the confirmation shown once `setfree config`
 // connects a gateway: which coding CLIs SetFree found installed and can
 // now launch against it, so the user knows exactly what to type next

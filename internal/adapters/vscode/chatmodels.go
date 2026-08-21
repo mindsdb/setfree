@@ -1,0 +1,159 @@
+package vscode
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+
+	"github.com/mindsdb/setfree/internal/catalog"
+)
+
+// groupName is the top-level name of SetFree's provider entry in
+// chatLanguageModels.json. Upserts key on it, so SetFree only ever
+// manages its own entry and never touches providers the user added.
+const groupName = "SetFree"
+
+// chatModelGroup is one provider entry in VS Code's chatLanguageModels.json
+// — Copilot's "Custom Endpoint" bring-your-own-key format. The file is a
+// JSON array of these. The apiKey is stored as plain text because that's
+// how the format works: VS Code sends the literal string as the bearer
+// token, and its documented secret-storage alternative (an ${input:...}
+// variable) is passed through unexpanded on current versions, yielding
+// empty auth on every request.
+type chatModelGroup struct {
+	Name    string          `json:"name"`
+	Vendor  string          `json:"vendor"`
+	APIKey  string          `json:"apiKey"`
+	APIType string          `json:"apiType"`
+	Models  []chatModelSpec `json:"models"`
+}
+
+type chatModelSpec struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
+	ToolCalling bool   `json:"toolCalling"`
+	Vision      bool   `json:"vision"`
+	// ContextWindow and MaxOutputTokens are budgets VS Code plans against,
+	// not values read from the API — the gateway's models endpoint doesn't
+	// expose real windows, so these are conservative fixed values.
+	ContextWindow   int            `json:"contextWindow"`
+	MaxOutputTokens int            `json:"maxOutputTokens"`
+	ModelOptions    map[string]any `json:"modelOptions,omitempty"`
+}
+
+const (
+	defaultContextWindow   = 200000
+	defaultMaxOutputTokens = 16000
+)
+
+// buildGroup turns a gateway catalog into SetFree's provider entry.
+// Embedding-only and disabled models are skipped; every chat model posts
+// to the gateway's chat-completions endpoint.
+func buildGroup(baseURL, apiKey string, models []catalog.Model) chatModelGroup {
+	endpoint := strings.TrimRight(baseURL, "/")
+	if !strings.HasSuffix(strings.ToLower(endpoint), "/v1") {
+		endpoint += "/v1"
+	}
+	endpoint += "/chat/completions"
+
+	group := chatModelGroup{
+		Name:    groupName,
+		Vendor:  "customendpoint",
+		APIKey:  apiKey,
+		APIType: "chat-completions",
+	}
+	for _, m := range models {
+		if !m.Usable() {
+			continue
+		}
+		spec := chatModelSpec{
+			ID:              m.ID,
+			Name:            m.DisplayName(),
+			URL:             endpoint,
+			ToolCalling:     true, // gates agent mode; catalog chat models take tools
+			ContextWindow:   defaultContextWindow,
+			MaxOutputTokens: defaultMaxOutputTokens,
+		}
+		// Kimi rejects VS Code's default temperature (0.1) with a 400;
+		// pinning 1 is the documented fix. Other catalog models accept
+		// the default.
+		if m.ID == "kimi" {
+			spec.ModelOptions = map[string]any{"temperature": 1}
+		}
+		group.Models = append(group.Models, spec)
+	}
+	return group
+}
+
+// chatModelsPath returns VS Code's chatLanguageModels.json location for the
+// default profile of a Stable install — beside settings.json.
+func chatModelsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library/Application Support/Code/User/chatLanguageModels.json"), nil
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Code", "User", "chatLanguageModels.json"), nil
+		}
+		return filepath.Join(home, "AppData", "Roaming", "Code", "User", "chatLanguageModels.json"), nil
+	default:
+		return filepath.Join(home, ".config/Code/User/chatLanguageModels.json"), nil
+	}
+}
+
+// upsertChatModels writes group into the chatLanguageModels.json at path,
+// replacing SetFree's previous entry if one exists and leaving every other
+// provider untouched. A file that exists but doesn't parse is left alone
+// and reported — overwriting a config the user may have hand-edited (the
+// file allows that; the wizard opens it in an editor) would be worse than
+// asking them to fix it.
+func upsertChatModels(path string, group chatModelGroup) error {
+	groups := []json.RawMessage{}
+	data, err := os.ReadFile(path)
+	switch {
+	case os.IsNotExist(err):
+		// First write: start empty.
+	case err != nil:
+		return err
+	default:
+		if err := json.Unmarshal(data, &groups); err != nil {
+			return fmt.Errorf("%s exists but isn't valid JSON — fix or remove it, then relaunch: %w", path, err)
+		}
+	}
+
+	kept := groups[:0]
+	for _, raw := range groups {
+		var probe struct {
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(raw, &probe) == nil && probe.Name == group.Name {
+			continue // SetFree's old entry: replaced below
+		}
+		kept = append(kept, raw)
+	}
+
+	encoded, err := json.Marshal(group)
+	if err != nil {
+		return err
+	}
+	kept = append(kept, encoded)
+
+	out, err := json.MarshalIndent(kept, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	// 0600: the file holds the API key in plain text. That's inherent to
+	// the format, but nothing says other users on the machine get to read it.
+	return os.WriteFile(path, append(out, '\n'), 0o600)
+}
