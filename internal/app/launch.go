@@ -138,6 +138,12 @@ func runFirstTimeSetup(e *env, cliName string) (gateway.Resolved, error) {
 // a specific vendor's model this gateway may not even serve. It also marks
 // the choice resolved, so the usual discovery probe (internal/app/
 // modelchoice.go) doesn't run and second-guess it on the next launch.
+//
+// p's ModelDiscovery carries over too. Marking the choice resolved means
+// the probe that would normally detect discovery support never runs, so
+// if it weren't copied here, connecting a discovery-capable provider
+// would permanently disable its CLIs' built-in model pickers (e.g.
+// Claude Code's `/model` against a MindsHub gateway).
 func applyProviderDefaultModel(e *env, p config.Provider) error {
 	if p.DefaultModel == "" {
 		return nil
@@ -147,8 +153,9 @@ func applyProviderDefaultModel(e *env, p config.Provider) error {
 	}
 	for _, a := range adapters.All() {
 		e.settings.CLI[a.Name()] = config.CLISetting{
-			Model:         p.DefaultModel,
-			ModelResolved: true,
+			Model:          p.DefaultModel,
+			ModelResolved:  true,
+			ModelDiscovery: p.ModelDiscovery,
 		}
 	}
 	return config.Save(e.dir, e.settings)

@@ -39,6 +39,11 @@ type Provider struct {
 	// unset for that CLI's own hardcoded default, which usually names a
 	// specific vendor's model this gateway may not even serve.
 	DefaultModel string
+	// ModelDiscovery marks a provider known to serve each CLI's model
+	// catalog in that CLI's own native shape (MindsHub rewrites its
+	// catalog for Claude Code callers), so the CLI's built-in model
+	// picker can be enabled against it without probing first.
+	ModelDiscovery bool
 }
 
 // NeedsBaseURL reports whether setup must prompt for an address.
@@ -93,13 +98,14 @@ func MindsHubBillingURL() string {
 func Providers() []Provider {
 	return []Provider{
 		{
-			Key:          "mindshub",
-			DisplayName:  "MindsHub",
-			Detail:       "all models in one place, open and closed — sign in with your browser",
-			BaseURL:      fmt.Sprintf("https://api.%s", mindsHubDomain()),
-			SSO:          true,
-			Recommended:  true,
-			DefaultModel: "mindshub_air",
+			Key:            "mindshub",
+			DisplayName:    "MindsHub",
+			Detail:         "all models in one place, open and closed — sign in with your browser",
+			BaseURL:        fmt.Sprintf("https://api.%s", mindsHubDomain()),
+			SSO:            true,
+			Recommended:    true,
+			DefaultModel:   "mindshub_air",
+			ModelDiscovery: true,
 		},
 		{
 			Key:         "openrouter",

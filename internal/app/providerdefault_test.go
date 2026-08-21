@@ -29,6 +29,12 @@ func TestApplyProviderDefaultModel_PinsModelForEveryAdapter(t *testing.T) {
 		if !got.ModelResolved {
 			t.Errorf("%s: ModelResolved = false, want true so the discovery probe doesn't second-guess it", a.Name())
 		}
+		// Resolved=true means the probe never runs, so discovery has to be
+		// carried in here or the CLI's built-in model picker (Claude
+		// Code's /model) would stay permanently disabled on MindsHub.
+		if !got.ModelDiscovery {
+			t.Errorf("%s: ModelDiscovery = false, want true — CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY would never be set", a.Name())
+		}
 	}
 
 	reloaded, err := config.Load(e.dir)

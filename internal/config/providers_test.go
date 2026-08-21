@@ -139,6 +139,17 @@ func TestProviders_OnlyMindsHubHasADefaultModel(t *testing.T) {
 	}
 }
 
+// MindsHub rewrites its catalog into each CLI's native shape, so the
+// CLIs' built-in model pickers work against it without probing first.
+// No other preset promises that.
+func TestProviders_OnlyMindsHubEnablesModelDiscovery(t *testing.T) {
+	for _, p := range Providers() {
+		if want := p.Key == "mindshub"; p.ModelDiscovery != want {
+			t.Errorf("%s: ModelDiscovery = %v, want %v", p.Key, p.ModelDiscovery, want)
+		}
+	}
+}
+
 func TestFindProvider_Unknown(t *testing.T) {
 	if _, ok := FindProvider("nope"); ok {
 		t.Error("expected an unknown key to report not-found")
