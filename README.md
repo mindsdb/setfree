@@ -19,22 +19,6 @@ Claude Code, Codex, Gemini CLI, Aider: good interfaces, all of them. But each on
 
 The CLI you like and the model you use should be two different decisions. SetFree just makes that true.
 
-## How it works
-
-```
-Claude Code ─┐
-Codex ───────┤
-Gemini CLI ──┤──  SetFree  ──  your gateway  ──  your model
-Aider ───────┤
-```
-
-Run `setfree claude` and here's the whole trick:
-
-1. SetFree finds your installed `claude` binary.
-2. It turns your configured gateway into whatever that CLI actually expects: environment variables for Claude Code, config flags for Codex.
-3. It becomes that binary. A real `exec`, not a wrapper sitting on top. Same stdin, same stdout, same exit code.
-
-No proxy in the middle, no process babysitting your session. Once it launches, SetFree is gone and you're just running Claude Code.
 
 ## Install
 
