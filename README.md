@@ -9,9 +9,9 @@
 setfree claude
 ```
 
-And you get your usual `claude`. but with whatever model you want.
+And you get your usual `claude`, but with whatever model you want.
 
-SetFree doesn't touch your terminal, your keybindings, or your Claude config. It just hands the real CLI the environment it needs and gets out of the way.
+
 
 ## Why
 
