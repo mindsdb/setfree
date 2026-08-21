@@ -21,6 +21,11 @@ type Installation struct {
 type Build struct {
 	Env  []string
 	Args []string
+	// Note, if non-empty, is a one-line caveat printed before launching —
+	// for the rare CLI where a silent launch would hide a real gotcha
+	// (e.g. VS Code ignoring the environment when an instance is already
+	// running). Most adapters leave it empty; silence is the norm.
+	Note string
 }
 
 // Adapter knows how one coding CLI receives configuration.
@@ -64,8 +69,23 @@ func Register(a Adapter) {
 	registry[a.Name()] = a
 }
 
-// Find returns the adapter for name, if SetFree can launch it.
+// aliases maps alternate command-line spellings to canonical adapter
+// names, so `setfree vscode` works as well as `setfree code`. Aliases are
+// lookup-only: they never appear in All(), so per-CLI settings and
+// listings always use the one canonical name.
+var aliases = map[string]string{}
+
+// RegisterAlias makes name resolve to the same adapter as canonical.
+func RegisterAlias(name, canonical string) {
+	aliases[name] = canonical
+}
+
+// Find returns the adapter for name, if SetFree can launch it. Aliases
+// resolve to their canonical adapter.
 func Find(name string) (Adapter, bool) {
+	if canonical, ok := aliases[name]; ok {
+		name = canonical
+	}
 	a, ok := registry[name]
 	return a, ok
 }

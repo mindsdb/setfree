@@ -17,10 +17,12 @@ Examples:
   setfree claude
   setfree claude .
   setfree codex .
+  setfree code .
 
 Supported CLIs:
   claude   Claude Code
   codex    Codex
+  code     VS Code (its Claude Code extension routes through the gateway)
 
 Environment variables (override saved config for one run):
   SETFREE_BASE_URL      gateway base URL

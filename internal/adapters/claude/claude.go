@@ -64,6 +64,15 @@ func (adapter) DisplayName() string   { return "Claude Code" }
 func (adapter) BinaryNames() []string { return []string{"claude"} }
 
 func (adapter) Build(baseEnv []string, resolved gateway.Resolved) (adapters.Build, error) {
+	return adapters.Build{Env: Env(baseEnv, resolved)}, nil
+}
+
+// Env builds the environment Claude Code needs to route through resolved's
+// gateway. Exported because Claude Code isn't only launched directly: the
+// vscode adapter launches editors whose Claude Code extension spawns the
+// same `claude` binary, which reads this exact environment — so both
+// adapters must agree on it, byte for byte.
+func Env(baseEnv []string, resolved gateway.Resolved) []string {
 	env := envutil.Unset(baseEnv, envAPIKey)
 	env = envutil.Set(env, envBaseURL, resolved.Gateway.BaseURL)
 	env = envutil.Set(env, envAuthToken, resolved.Gateway.APIKey)
@@ -73,10 +82,19 @@ func (adapter) Build(baseEnv []string, resolved gateway.Resolved) (adapters.Buil
 	if resolved.ModelDiscovery {
 		env = envutil.Set(env, envModelDiscovery, "1")
 	}
-	return adapters.Build{Env: env}, nil
+	return env
 }
 
 func (adapter) DiscoverModels(ctx context.Context, gw gateway.Gateway) adapters.Discovery {
+	return Discover(ctx, gw)
+}
+
+// Discover probes gw's models endpoint the way the Claude Code binary
+// itself would. Exported for the same reason as Env: any adapter that
+// ultimately runs Claude Code (the vscode adapter, via the extension)
+// needs the identical probe, or the two would classify the same gateway
+// differently.
+func Discover(ctx context.Context, gw gateway.Gateway) adapters.Discovery {
 	return adapters.ProbeModels(ctx, gw.BaseURL, map[string]string{
 		"Authorization":     "Bearer " + gw.APIKey,
 		"x-api-key":         gw.APIKey, // hedge: real Anthropic-style gateways expect this instead

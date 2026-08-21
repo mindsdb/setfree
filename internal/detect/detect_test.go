@@ -32,7 +32,7 @@ func TestList_SupportedEntriesHaveAdapters(t *testing.T) {
 	// every entry marked Supported must correspond to a real adapter name.
 	// (The adapters package itself isn't imported here to avoid a cycle;
 	// this just checks the two supported keys by name.)
-	wantSupported := map[string]bool{"claude": true, "codex": true}
+	wantSupported := map[string]bool{"claude": true, "codex": true, "code": true}
 	for _, k := range List {
 		if k.Supported != wantSupported[k.Key] {
 			t.Errorf("%s: Supported = %v, want %v", k.Key, k.Supported, wantSupported[k.Key])

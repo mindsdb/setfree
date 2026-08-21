@@ -24,6 +24,7 @@ type Known struct {
 var List = []Known{
 	{Key: "claude", DisplayName: "Claude Code", BinaryNames: []string{"claude"}, Supported: true},
 	{Key: "codex", DisplayName: "Codex", BinaryNames: []string{"codex"}, Supported: true},
+	{Key: "code", DisplayName: "VS Code", BinaryNames: []string{"code", "code-insiders"}, Supported: true},
 	{Key: "gemini", DisplayName: "Gemini CLI", BinaryNames: []string{"gemini"}, Supported: false},
 	{Key: "aider", DisplayName: "Aider", BinaryNames: []string{"aider"}, Supported: false},
 }

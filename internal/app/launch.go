@@ -74,6 +74,9 @@ func cmdLaunch(name string, passthrough []string) int {
 		// Every fully silent run goes straight to exec.
 		fmt.Printf("Launching %s...\n\n", adapter.DisplayName())
 	}
+	if build.Note != "" {
+		fmt.Println(build.Note)
+	}
 
 	argv := buildArgv(path, build.Args, passthrough)
 
