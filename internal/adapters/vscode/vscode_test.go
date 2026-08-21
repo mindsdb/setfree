@@ -9,6 +9,7 @@ import (
 
 	"github.com/mindsdb/setfree/internal/adapters"
 	"github.com/mindsdb/setfree/internal/adapters/claude"
+	"github.com/mindsdb/setfree/internal/detect"
 	"github.com/mindsdb/setfree/internal/gateway"
 )
 
@@ -27,6 +28,21 @@ func TestVSCodeAdapter_IsRegisteredUnderBothNames(t *testing.T) {
 	}
 	if alias.Name() != "code" {
 		t.Errorf("alias resolved to %q, want the canonical code adapter", alias.Name())
+	}
+}
+
+// The adapter and detect must search the exact same places, or the
+// landing screen could say "installed" while launch says "not found".
+func TestBinaryNames_MatchDetect(t *testing.T) {
+	got := adapter{}.BinaryNames()
+	want := detect.VSCodeBinaries()
+	if len(got) != len(want) {
+		t.Fatalf("BinaryNames() has %d entries, detect.VSCodeBinaries() has %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("BinaryNames()[%d] = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 

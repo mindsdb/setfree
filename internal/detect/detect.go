@@ -3,7 +3,12 @@
 // for the landing screen and helpful error messages.
 package detect
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+)
 
 // Known describes one coding CLI SetFree recognizes.
 type Known struct {
@@ -24,9 +29,38 @@ type Known struct {
 var List = []Known{
 	{Key: "claude", DisplayName: "Claude Code", BinaryNames: []string{"claude"}, Supported: true},
 	{Key: "codex", DisplayName: "Codex", BinaryNames: []string{"codex"}, Supported: true},
-	{Key: "code", DisplayName: "VS Code", BinaryNames: []string{"code", "code-insiders"}, Supported: true},
+	{Key: "code", DisplayName: "VS Code", BinaryNames: VSCodeBinaries(), Supported: true},
 	{Key: "gemini", DisplayName: "Gemini CLI", BinaryNames: []string{"gemini"}, Supported: false},
 	{Key: "aider", DisplayName: "Aider", BinaryNames: []string{"aider"}, Supported: false},
+}
+
+// VSCodeBinaries lists everywhere the VS Code CLI actually lives: the PATH
+// names first, then — on macOS — the CLI script inside the app bundle
+// itself. Installing VS Code on a Mac doesn't put `code` on PATH; that
+// takes a separate "Shell Command: Install 'code' command" step most
+// people never run, so an installed VS Code would otherwise be reported as
+// missing. exec.LookPath handles the absolute entries (a name containing a
+// slash is tried directly), so callers just iterate this list as usual.
+//
+// Exported because the vscode adapter must search the exact same places —
+// detect saying "installed" while launch says "not found" would be worse
+// than either alone.
+func VSCodeBinaries() []string {
+	names := []string{"code", "code-insiders"}
+	if runtime.GOOS != "darwin" {
+		return names
+	}
+	appDirs := []string{"/Applications"}
+	if home, err := os.UserHomeDir(); err == nil {
+		appDirs = append(appDirs, filepath.Join(home, "Applications"))
+	}
+	for _, dir := range appDirs {
+		names = append(names,
+			filepath.Join(dir, "Visual Studio Code.app/Contents/Resources/app/bin/code"),
+			filepath.Join(dir, "Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders"),
+		)
+	}
+	return names
 }
 
 // Find looks up key in List.

@@ -20,6 +20,7 @@ import (
 
 	"github.com/mindsdb/setfree/internal/adapters"
 	"github.com/mindsdb/setfree/internal/adapters/claude"
+	"github.com/mindsdb/setfree/internal/detect"
 	"github.com/mindsdb/setfree/internal/gateway"
 )
 
@@ -33,9 +34,11 @@ func init() {
 func (adapter) Name() string        { return "code" }
 func (adapter) DisplayName() string { return "VS Code" }
 
-// BinaryNames prefers stable VS Code but falls back to Insiders, matching
-// how people who only run Insiders have just the one on PATH.
-func (adapter) BinaryNames() []string { return []string{"code", "code-insiders"} }
+// BinaryNames prefers the PATH names but also searches the macOS app
+// bundle directly (see detect.VSCodeBinaries): installing VS Code on a Mac
+// doesn't put `code` on PATH, and requiring that extra manual step would
+// make an installed VS Code look missing.
+func (adapter) BinaryNames() []string { return detect.VSCodeBinaries() }
 
 func (adapter) Build(baseEnv []string, resolved gateway.Resolved) (adapters.Build, error) {
 	return adapters.Build{
