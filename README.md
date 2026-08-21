@@ -73,33 +73,9 @@ Setup only happens on a real terminal. In scripts or CI, set `SETFREE_BASE_URL` 
 
 Claude Code and Codex work today. Gemini CLI and Aider get detected if they're installed and show up on the landing screen, but they politely decline to launch until someone builds an adapter for them. No pretending.
 
-## Gateways
+## Gateway configuration
 
-SetFree doesn't ship gateway-specific integrations. It needs one thing: a base URL and a key for an endpoint that speaks the protocol your CLI already expects (Anthropic-style for Claude Code, the OpenAI Responses API for Codex). That already covers most OpenRouter, LiteLLM, and self-hosted setups, plus a local proxy on `localhost`.
 
-If a gateway needs something weirder, custom headers or a different auth scheme, that's what a gateway-specific adapter would handle later. See the roadmap.
-
-## Configuration
-
-SetFree keeps two small files in your normal per-user config directory: `~/Library/Application Support/setfree` on macOS, `~/.config/setfree` on Linux, `%AppData%\setfree` on Windows.
-
-`config.toml` holds everything non-secret:
-
-```toml
-version = 1
-default_gateway = "default"
-
-[gateways.default]
-base_url = "https://llm.example.com"
-
-[cli.claude]
-model = "kimi-k2.5"
-
-[cli.codex]
-model = "gpt-5"
-```
-
-`credentials.toml` holds the API key, alone, at `0600`, so debugging your config with `cat` never leaks a secret onto your screen.
 
 Manage both without opening either file:
 
@@ -120,36 +96,6 @@ Environment variables override saved config for a single run, handy in scripts a
 | `SETFREE_GATEWAY` | which saved gateway to use |
 
 Order of precedence: env vars, then saved config, then interactive setup (terminal only).
-
-## Architecture
-
-One abstraction: a CLI adapter.
-
-```go
-type Adapter interface {
-	Name() string          // "claude"
-	DisplayName() string   // "Claude Code"
-	BinaryNames() []string // executables to look for on PATH
-	Build(baseEnv []string, resolved gateway.Resolved) (Build, error)
-}
-```
-
-`Build` takes a gateway (base URL, key, optional model) and returns whatever env vars or extra args that CLI needs. Everything vendor-specific stays inside one adapter. Nothing else in SetFree needs to know how Claude Code or Codex actually read their config.
-
-```
-internal/
-  adapters/   adapter interface and registry, plus claude/ and codex/
-  config/     SetFree's own settings, non-secret
-  secrets/    API keys, kept separate on purpose
-  gateway/    the normalized Gateway type and resolution order
-  detect/     which known CLIs are installed
-  launcher/   exec on Unix, spawn and wait on Windows
-  terminal/   TTY and color detection, hidden password input
-  ui/         the robot, the landing screen, setup and config prompts
-  app/        command dispatch, the one place it all meets
-```
-
-No daemon, no background process, nothing persisted beyond the two config files above.
 
 ## Adding a CLI adapter
 
