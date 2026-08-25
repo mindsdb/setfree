@@ -14,6 +14,7 @@ import (
 	"github.com/mindsdb/setfree/internal/launcher"
 	"github.com/mindsdb/setfree/internal/terminal"
 	"github.com/mindsdb/setfree/internal/ui"
+	"github.com/mindsdb/setfree/internal/vision"
 )
 
 // cmdLaunch is `setfree <cli> [args...]`.
@@ -80,8 +81,29 @@ func cmdLaunch(name string, passthrough []string) int {
 		}
 	}
 
+	// Vision bridge: when a vision model is configured, start a local proxy
+	// that captions image content with a separate multimodal model, and point
+	// the CLI at it instead of the gateway. The CLI binary is unchanged; it
+	// just talks to our proxy, which forwards everything else untouched. The
+	// proxy lives only as long as this launch, so the parent must stay alive
+	// to tear it down — which is why the vision path runs the CLI as a child
+	// (launcher.Run) instead of exec-replacing (launcher.Launch).
+	vcfg := vision.Resolve(e.settings, e.store, os.Getenv, config.GatewaySetting{BaseURL: resolved.Gateway.BaseURL}, resolved.Gateway.APIKey)
+	vres, err := vision.MaybeStart(context.Background(), resolved, vcfg)
+	if err != nil {
+		debugf("vision bridge: %v", err)
+		// A bridge that can't start shouldn't block the user: fall back to a
+		// normal launch against the gateway. Images will 400 as before, but
+		// text work proceeds.
+		vres.ProxyURL = ""
+	}
+	if vres.ProxyURL != "" {
+		resolved.Gateway.BaseURL = vres.ProxyURL
+	}
+
 	build, err := adapter.Build(os.Environ(), resolved)
 	if err != nil {
+		vres.Stop()
 		return fail(err)
 	}
 
@@ -96,10 +118,23 @@ func cmdLaunch(name string, passthrough []string) int {
 	}
 
 	argv := buildArgv(path, build.Args, passthrough)
+	opts := launcher.Options{Path: path, Args: argv, Env: build.Env}
 
-	code, err := launcher.Launch(launcher.Options{Path: path, Args: argv, Env: build.Env})
+	// Vision off → exec-replace as always (no parent process left behind).
+	// Vision on → run the CLI as a child so the proxy can be torn down on
+	// exit, then return the child's exit code.
+	if vres.ProxyURL == "" {
+		code, err := launcher.Launch(opts)
+		if err != nil {
+			debugf("exec of %s failed: %v", path, err)
+			return fail(fmt.Errorf("couldn't launch %s: %w", adapter.DisplayName(), err))
+		}
+		return code
+	}
+	code, err := launcher.Run(opts)
+	vres.Stop()
 	if err != nil {
-		debugf("exec of %s failed: %v", path, err)
+		debugf("run of %s failed: %v", path, err)
 		return fail(fmt.Errorf("couldn't launch %s: %w", adapter.DisplayName(), err))
 	}
 	return code

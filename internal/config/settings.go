@@ -20,6 +20,22 @@ type Settings struct {
 	DefaultGateway string                    `toml:"default_gateway,omitempty"`
 	Gateways       map[string]GatewaySetting `toml:"gateways,omitempty"`
 	CLI            map[string]CLISetting     `toml:"cli,omitempty"`
+	// Vision, when its Model is set, enables the vision bridge: a local
+	// proxy that captions image content with a separate multimodal model so a
+	// text-only main model never receives a raw image block. Inert when
+	// unset. The bridge's API key lives in the secrets store under the
+	// "vision" name, not here.
+	Vision VisionSetting `toml:"vision,omitempty"`
+}
+
+// VisionSetting is the non-secret half of the vision-bridge config. The
+// bridge is off unless Model names a multimodal model to caption with.
+// BaseURL and the API key are optional; when unset they fall back to the
+// main gateway's, so the common case (one endpoint serving both a text and a
+// vision model) needs only the model id.
+type VisionSetting struct {
+	Model   string `toml:"model,omitempty"`
+	BaseURL string `toml:"base_url,omitempty"`
 }
 
 // GatewaySetting holds the non-secret half of a configured gateway.

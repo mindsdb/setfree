@@ -17,6 +17,7 @@ import (
 	"github.com/mindsdb/setfree/internal/terminal"
 	"github.com/mindsdb/setfree/internal/ui"
 	"github.com/mindsdb/setfree/internal/version"
+	"github.com/mindsdb/setfree/internal/vision"
 )
 
 // env holds everything a command needs, resolved once per run.
@@ -71,6 +72,10 @@ func Run(args []string) int {
 	case "usage":
 		maybeSelfUpdate()
 		return cmdUsage(args[1:])
+	case vision.ProxySubcommand:
+		// Internal: the launcher relaunches the setfree binary as the vision
+		// proxy. Not advertised; no self-update on this path.
+		return vision.Run(args[1:])
 	default:
 		maybeSelfUpdate()
 		return cmdLaunch(args[0], args[1:])
