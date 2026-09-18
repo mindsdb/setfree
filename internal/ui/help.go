@@ -11,6 +11,7 @@ const HelpText = `SetFree — Any coding CLI. Any gateway. Any model.
 Usage:
   setfree <cli> [args...]
   setfree config [show|set|reset]
+  setfree usage [--lifetime] [--json]
   setfree version
 
 Examples:

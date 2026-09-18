@@ -82,7 +82,13 @@ setfree config       # interactive: view and edit base URL / API key
 setfree config show
 setfree config set --base-url https://gw.example.com --api-key sk-...
 setfree config reset
+setfree usage
+setfree usage --lifetime
 ```
+
+For the MindsHub gateway, `usage` shows token counts and billed cost grouped
+by model. Add `--json` for machine-readable output. Usage checks are not
+available for other gateways because their accounting APIs differ.
 
 Environment variables override saved config for a single run, handy in scripts and CI:
 
