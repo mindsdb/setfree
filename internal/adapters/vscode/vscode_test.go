@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -105,8 +107,8 @@ func TestBuild_WarnsAboutAlreadyRunningVSCode(t *testing.T) {
 }
 
 // Prepare, end to end: catalog fetched from the gateway, provider entry
-// written where VS Code reads it. HOME is overridden so chatModelsPath
-// resolves into the test dir.
+// written where VS Code reads it. HOME (and APPDATA/USERPROFILE on
+// Windows) is overridden so chatModelsPath resolves into the test dir.
 func TestPrepare_WritesChatModelsFromGatewayCatalog(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"data":[{"id":"mindshub_air","label":"MindsHub Air"},{"id":"kimi","label":"Kimi K3"}]}`))
@@ -115,6 +117,10 @@ func TestPrepare_WritesChatModelsFromGatewayCatalog(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	}
 
 	note, err := adapter{}.Prepare(context.Background(), gateway.Resolved{
 		Gateway: gateway.Gateway{BaseURL: srv.URL, APIKey: "mdb_k"},

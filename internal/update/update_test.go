@@ -197,7 +197,8 @@ func TestReplaceSelf_SwapsContentAndSetsExecutablePermission(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
-	if info.Mode().Perm()&0o100 == 0 {
+	// Windows has no executable bit; .exe is what makes it runnable.
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0 {
 		t.Error("expected the replaced binary to be executable")
 	}
 
