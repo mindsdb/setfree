@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -115,6 +116,9 @@ func TestPrepare_WritesChatModelsFromGatewayCatalog(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		t.Setenv("APPDATA", home)
+	}
 
 	note, err := adapter{}.Prepare(context.Background(), gateway.Resolved{
 		Gateway: gateway.Gateway{BaseURL: srv.URL, APIKey: "mdb_k"},
