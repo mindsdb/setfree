@@ -193,12 +193,14 @@ func TestReplaceSelf_SwapsContentAndSetsExecutablePermission(t *testing.T) {
 	if err != nil || string(got) != "new content" {
 		t.Fatalf("ReadFile = %q, %v", got, err)
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if info.Mode().Perm()&0o100 == 0 {
-		t.Error("expected the replaced binary to be executable")
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if info.Mode().Perm()&0o100 == 0 {
+			t.Error("expected the replaced binary to be executable")
+		}
 	}
 
 	// No leftover temp files.

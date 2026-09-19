@@ -68,6 +68,9 @@ func Run(args []string) int {
 	case "config":
 		maybeSelfUpdate()
 		return cmdConfig(args[1:])
+	case "usage":
+		maybeSelfUpdate()
+		return cmdUsage(args[1:])
 	default:
 		maybeSelfUpdate()
 		return cmdLaunch(args[0], args[1:])

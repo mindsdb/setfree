@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -95,9 +96,11 @@ func TestUpsertChatModels_FreshFile(t *testing.T) {
 		t.Errorf("groups = %+v", groups)
 	}
 
-	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("mode = %v, want 0600 — the file holds the API key in plain text", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		info, _ := os.Stat(path)
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("mode = %v, want 0600 — the file holds the API key in plain text", info.Mode().Perm())
+		}
 	}
 }
 

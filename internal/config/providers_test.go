@@ -78,6 +78,13 @@ func TestMindsHubDefaultsToProduction(t *testing.T) {
 	}
 }
 
+func TestMindsHubUsageAPI_FollowsDomainOverride(t *testing.T) {
+	t.Setenv(EnvMindsHubDomain, "staging.mindshub.ai")
+	if got := MindsHubUsageAPI(); got != "https://auth.staging.mindshub.ai/v1/usage/summary/" {
+		t.Errorf("usage API = %q", got)
+	}
+}
+
 func TestMindsHubConsoleURL_FollowsDomainOverride(t *testing.T) {
 	t.Setenv(EnvMindsHubDomain, "staging.mindshub.ai")
 	if got := MindsHubConsoleURL(); got != "https://console.staging.mindshub.ai" {

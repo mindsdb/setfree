@@ -81,6 +81,12 @@ func MindsHubAuthAPI() string {
 	return fmt.Sprintf("https://auth.%s/v1", mindsHubDomain())
 }
 
+// MindsHubUsageAPI returns the per-model usage endpoint for the MindsHub
+// account associated with the configured API key.
+func MindsHubUsageAPI() string {
+	return MindsHubAuthAPI() + "/usage/summary/"
+}
+
 // MindsHubConsoleURL returns the web console's address.
 func MindsHubConsoleURL() string {
 	return fmt.Sprintf("https://console.%s", mindsHubDomain())
