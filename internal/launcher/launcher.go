@@ -26,3 +26,18 @@ type Options struct {
 func Launch(opts Options) (exitCode int, err error) {
 	return launch(opts)
 }
+
+// Run spawns the process described by opts as a child and waits for it,
+// returning its exit code. Unlike Launch (which exec-replaces on Unix), Run
+// keeps the SetFree process alive as the parent — so a caller that started
+// sidecar processes (e.g. the vision proxy) can tear them down when the child
+// exits. Signals to the parent are forwarded to the child so the launched
+// CLI behaves like it was invoked directly.
+//
+// This is the path the vision bridge uses: the proxy must live exactly as
+// long as the CLI, which means SetFree has to stay around to kill it. Every
+// other launch still uses Launch (exec-replace), so the common case is
+// unchanged.
+func Run(opts Options) (exitCode int, err error) {
+	return run(opts)
+}

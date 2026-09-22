@@ -46,3 +46,11 @@ func launch(opts Options) (int, error) {
 	}
 	return 0, err
 }
+
+// run is identical to launch on Windows: Windows can't replace a process in
+// place, so launch already spawns-and-waits. The Run entry point exists for
+// callers that need the parent to stay alive (the vision bridge), and on
+// Windows that's the only mode there is.
+func run(opts Options) (int, error) {
+	return launch(opts)
+}

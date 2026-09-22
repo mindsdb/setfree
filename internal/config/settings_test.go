@@ -43,6 +43,34 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveLoad_VisionRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := &Settings{Version: CurrentVersion, DefaultGateway: "default"}
+	s.SetGatewayBaseURL("default", "https://gw.example.com")
+	s.Vision = VisionSetting{Model: "qwen3.5", BaseURL: "https://vision.example.com"}
+	if err := Save(dir, s); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Vision.Model != "qwen3.5" || loaded.Vision.BaseURL != "https://vision.example.com" {
+		t.Errorf("Vision = %+v, want model=qwen3.5 base=https://vision.example.com", loaded.Vision)
+	}
+}
+
+func TestLoad_EmptySettingsHasNoVision(t *testing.T) {
+	dir := t.TempDir()
+	loaded, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Vision.Model != "" {
+		t.Errorf("fresh settings should have no vision model, got %q", loaded.Vision.Model)
+	}
+}
+
 func TestLoad_RejectsNewerSchemaVersion(t *testing.T) {
 	dir := t.TempDir()
 	future := &Settings{Version: CurrentVersion + 1}
